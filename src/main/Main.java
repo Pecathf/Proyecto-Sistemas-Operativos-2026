@@ -13,24 +13,26 @@ package main;
 import edd.Cola;
 import procesos.EstadoProceso;
 import procesos.Proceso;
+import procesos.Planificador;
+
 
 public class Main {
 
     public static void main(String[] args) {
-        // 2. LA INSTANCIACIÓN VA DENTRO DE UN MÉTODO O DEL MAIN
-        Cola<Proceso> colaListos = new Cola<>();
+        // Instanciamos el planificador con un Quantum de 3 unidades
+        Planificador planificador = new Planificador(3);
 
-        // Creamos un par de procesos de prueba
-        Proceso p1 = new Proceso(1, "Navegador", 5, 1);
-        Proceso p2 = new Proceso(2, "EditorTexto", 3, 2);
+        // Creamos 3 procesos de prueba (id, nombre, tiempoEjecucion, prioridad)
+        Proceso p1 = new Proceso(1, "Navegador Web", 7, 1);
+        Proceso p2 = new Proceso(2, "Editor de Texto", 2, 2);
+        Proceso p3 = new Proceso(3, "Reproductor Musica", 5, 3);
 
-        // Cambiamos su estado a LISTO y los encolamos
-        p1.setEstado(EstadoProceso.LISTO);
-        p2.setEstado(EstadoProceso.LISTO);
+        // Agregamos los procesos al planificador
+        planificador.agregarProceso(p1);
+        planificador.agregarProceso(p2);
+        planificador.agregarProceso(p3);
 
-        colaListos.encolar(p1);
-        colaListos.encolar(p2);
-
-        System.out.println("Procesos en cola de listos: " + colaListos.getTamano());
+        // Ejecutamos la simulación completa Round Robin
+        planificador.ejecutarSimulacionCompleta();
     }
 }
