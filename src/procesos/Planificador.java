@@ -1,6 +1,8 @@
 package procesos;
 
 import edd.Cola;
+import politicas.PoliticaPlanificacion;
+import politicas.PoliticaRoundRobin;
 
 public class Planificador {
 
@@ -11,14 +13,28 @@ public class Planificador {
     
     private Proceso procesoEnEjecucion;
     private int quantum;
+    
+    // PATRÓN STRATEGY
+    private PoliticaPlanificacion politica;
 
-    public Planificador(int quantum) {
+    public Planificador(int quantum, PoliticaPlanificacion politica) {
         this.colaTrabajos = new Cola<>();
         this.colaListos = new Cola<>();
         this.colaBloqueados = new Cola<>();
         this.colaTerminados = new Cola<>();
         this.procesoEnEjecucion = null;
         this.quantum = quantum;
+        this.politica = politica;
+    }
+
+    // Constructor por defecto usando Round Robin
+    public Planificador(int quantum) {
+        this(quantum, new PoliticaRoundRobin());
+    }
+
+    public void setPolitica(PoliticaPlanificacion politica) {
+        this.politica = politica;
+        System.out.println("\n[CONFIG] Política de planificación cambiada a: " + politica.getClass().getSimpleName());
     }
 
     public void crearProceso(Proceso p) {
@@ -39,7 +55,7 @@ public class Planificador {
     public void simularLlamadaAlSistema(Proceso p, String operacion) {
         System.out.println("   [SYSCALL / TRAP] " + p.getNombre() + " solicita: " + operacion);
         p.setModo(ModoEjecucion.NUCLEO);
-        System.out.println("   --> [MODO NUCLEO ACTIVADO] Ejecutando rutina del Kernel de forma protegida...");
+        System.out.println("   --> [MODO NUCLEO ACTIVADO] Ejecutando rutina del Kernel...");
         p.setModo(ModoEjecucion.USUARIO);
         System.out.println("   --> Operación finalizada. Retornando a MODO USUARIO.");
     }
@@ -76,9 +92,12 @@ public class Planificador {
             }
         }
 
+        // Selección del siguiente proceso usando la política (STRATEGY)
         if (procesoEnEjecucion == null && !colaListos.estaVacia()) {
-            procesoEnEjecucion = colaListos.desencolar();
-            procesoEnEjecucion.setEstado(EstadoProceso.EJECUCION);
+            procesoEnEjecucion = politica.seleccionarSiguienteProceso(colaListos);
+            if (procesoEnEjecucion != null) {
+                procesoEnEjecucion.setEstado(EstadoProceso.EJECUCION);
+            }
         }
 
         if (procesoEnEjecucion != null) {
@@ -86,7 +105,6 @@ public class Planificador {
                                + " | Modo actual: " + procesoEnEjecucion.getModo()
                                + " | Tiempo restante previo: " + procesoEnEjecucion.getTiempoRestante());
 
-            // Si le quedan 4 unidades y no ha hecho E/S, se bloquea 1 sola vez
             if (procesoEnEjecucion.getTiempoRestante() == 4 && !procesoEnEjecucion.isRealizoIO()) {
                 procesoEnEjecucion.setRealizoIO(true);
                 simularLlamadaAlSistema(procesoEnEjecucion, "Solicitud Lectura de Disco");
@@ -98,11 +116,15 @@ public class Planificador {
                 return; 
             }
 
-            int tiempoEjecutado = Math.min(procesoEnEjecucion.getTiempoRestante(), quantum);
+            // Si la política usa Quantum (RR), se limita por el quantum, de lo contrario ejecuta todo su tiempo
+            int tiempoEjecutado = politica.usaQuantum() 
+                    ? Math.min(procesoEnEjecucion.getTiempoRestante(), quantum) 
+                    : procesoEnEjecucion.getTiempoRestante();
+
             procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - tiempoEjecutado);
             procesoEnEjecucion.setPc(procesoEnEjecucion.getPc() + tiempoEjecutado);
 
-            System.out.println("[CPU] Se usaron " + tiempoEjecutado + " unidades de Quantum.");
+            System.out.println("[CPU] Se usaron " + tiempoEjecutado + " unidades de tiempo.");
 
             if (procesoEnEjecucion.getTiempoRestante() <= 0) {
                 procesoEnEjecucion.setEstado(EstadoProceso.TERMINADO);
@@ -112,7 +134,7 @@ public class Planificador {
             } else {
                 procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
                 colaListos.encolar(procesoEnEjecucion);
-                System.out.println("[ESTADO] Expiró Quantum. Proceso " + procesoEnEjecucion.getNombre() 
+                System.out.println("[ESTADO] Expiró ráfaga. Proceso " + procesoEnEjecucion.getNombre() 
                                    + " reingresa a LISTOS. Tiempo restante: " + procesoEnEjecucion.getTiempoRestante());
                 procesoEnEjecucion = null;
             }
@@ -125,7 +147,7 @@ public class Planificador {
 
     public void ejecutarSimulacionCompleta() {
         admitirProcesos();
-        System.out.println("\n================ INICIANDO PLANIFICACIÓN ROUND ROBIN (Quantum = " + quantum + ") ================");
+        System.out.println("\n================ INICIANDO PLANIFICACIÓN (" + politica.getClass().getSimpleName() + ") ================");
         while (!colaListos.estaVacia() || !colaBloqueados.estaVacia() || procesoEnEjecucion != null) {
             ejecutarCiclo();
         }
@@ -134,6 +156,7 @@ public class Planificador {
 
     public int getQuantum() { return quantum; }
     public void setQuantum(int quantum) { this.quantum = quantum; }
+    public PoliticaPlanificacion getPolitica() { return politica; }
     public Cola<Proceso> getColaTrabajos() { return colaTrabajos; }
     public Cola<Proceso> getColaListos() { return colaListos; }
     public Cola<Proceso> getColaBloqueados() { return colaBloqueados; }
