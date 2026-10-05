@@ -9,30 +9,25 @@ package main;
  * @author Jabri
  */
 
-// 1. LOS IMPORTS VAN AQUÍ ARRIBA
-import edd.Cola;
-import procesos.EstadoProceso;
+
 import procesos.Proceso;
 import procesos.Planificador;
-
 
 public class Main {
 
     public static void main(String[] args) {
-        // Instanciamos el planificador con un Quantum de 3 unidades
         Planificador planificador = new Planificador(3);
 
-        // Creamos 3 procesos de prueba (id, nombre, tiempoEjecucion, prioridad)
-        Proceso p1 = new Proceso(1, "Navegador Web", 7, 1);
-        Proceso p2 = new Proceso(2, "Editor de Texto", 2, 2);
-        Proceso p3 = new Proceso(3, "Reproductor Musica", 5, 3);
+        Proceso p1 = new Proceso(1, "Navegador Web", 7, 1, 1000, 0);
+        Proceso p2 = new Proceso(2, "Editor de Texto", 2, 2, 1000, 0);
+        Proceso p3 = new Proceso(3, "Reproductor Musica", 5, 3, 1000, 0);
 
-        // Agregamos los procesos al planificador
-        planificador.agregarProceso(p1);
-        planificador.agregarProceso(p2);
-        planificador.agregarProceso(p3);
+        // Se agregan a la cola de trabajos (Largo plazo)
+        planificador.crearProceso(p1);
+        planificador.crearProceso(p2);
+        planificador.crearProceso(p3);
 
-        // Ejecutamos la simulación completa Round Robin
+        // Iniciar ejecución
         planificador.ejecutarSimulacionCompleta();
     }
 }

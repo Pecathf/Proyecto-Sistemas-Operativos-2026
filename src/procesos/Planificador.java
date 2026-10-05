@@ -1,25 +1,19 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package procesos;
-
-/**
- *
- * @author Jabri
- */
 
 import edd.Cola;
 
 public class Planificador {
 
-    private Cola<Proceso> colaListos;
-    private Cola<Proceso> colaBloqueados;
-    private Cola<Proceso> colaTerminados;
+    private Cola<Proceso> colaTrabajos;   
+    private Cola<Proceso> colaListos;     
+    private Cola<Proceso> colaBloqueados; 
+    private Cola<Proceso> colaTerminados; 
+    
     private Proceso procesoEnEjecucion;
     private int quantum;
 
     public Planificador(int quantum) {
+        this.colaTrabajos = new Cola<>();
         this.colaListos = new Cola<>();
         this.colaBloqueados = new Cola<>();
         this.colaTerminados = new Cola<>();
@@ -27,76 +21,122 @@ public class Planificador {
         this.quantum = quantum;
     }
 
-    // Registrar e ingresar un proceso a la cola de listos
-    public void agregarProceso(Proceso p) {
-        p.setEstado(EstadoProceso.LISTO);
-        colaListos.encolar(p);
-        System.out.println("Proceso encolado en LISTO: " + p.getNombre() + " (ID: " + p.getId() + ")");
+    public void crearProceso(Proceso p) {
+        p.setEstado(EstadoProceso.NUEVO);
+        colaTrabajos.encolar(p);
+        System.out.println("[TRABAJOS] Proceso encolado en Trabajos: " + p.getNombre() + " (PID: " + p.getId() + ")");
     }
 
-    // Ejecuta un ciclo de CPU procesando según el Quantum
+    public void admitirProcesos() {
+        while (!colaTrabajos.estaVacia()) {
+            Proceso p = colaTrabajos.desencolar();
+            p.setEstado(EstadoProceso.LISTO);
+            colaListos.encolar(p);
+            System.out.println("[LISTO] Proceso admitido en cola de listos: " + p.getNombre());
+        }
+    }
+
+    public void simularLlamadaAlSistema(Proceso p, String operacion) {
+        System.out.println("   [SYSCALL / TRAP] " + p.getNombre() + " solicita: " + operacion);
+        p.setModo(ModoEjecucion.NUCLEO);
+        System.out.println("   --> [MODO NUCLEO ACTIVADO] Ejecutando rutina del Kernel de forma protegida...");
+        p.setModo(ModoEjecucion.USUARIO);
+        System.out.println("   --> Operación finalizada. Retornando a MODO USUARIO.");
+    }
+
+    public void bloquearProcesoActual(String razon) {
+        if (procesoEnEjecucion != null) {
+            procesoEnEjecucion.setEstado(EstadoProceso.BLOQUEADO);
+            colaBloqueados.encolar(procesoEnEjecucion);
+            System.out.println("   [BLOQUEO] Proceso " + procesoEnEjecucion.getNombre() 
+                               + " pasa a BLOQUEADO por: " + razon);
+            procesoEnEjecucion = null; 
+        }
+    }
+
+    public void desbloquearProceso() {
+        if (!colaBloqueados.estaVacia()) {
+            Proceso p = colaBloqueados.desencolar();
+            p.setEstado(EstadoProceso.LISTO);
+            colaListos.encolar(p);
+            System.out.println("   [INTERRUPCIÓN E/S] Proceso " + p.getNombre() 
+                               + " completó E/S y regresa a LISTOS.");
+        }
+    }
+
     public void ejecutarCiclo() {
         if (colaListos.estaVacia() && procesoEnEjecucion == null) {
-            System.out.println("No hay procesos pendientes en la cola de listos.");
-            return;
+            if (!colaBloqueados.estaVacia()) {
+                System.out.println("\n[CPU INACTIVA] Esperando dispositivos de E/S...");
+                desbloquearProceso();
+                return;
+            } else {
+                System.out.println("No hay procesos pendientes.");
+                return;
+            }
         }
 
-        // Si la CPU está libre, se despacha el siguiente proceso
         if (procesoEnEjecucion == null && !colaListos.estaVacia()) {
-            procesoEnEjecucion = (Proceso) colaListos.desencolar();
+            procesoEnEjecucion = colaListos.desencolar();
             procesoEnEjecucion.setEstado(EstadoProceso.EJECUCION);
         }
 
         if (procesoEnEjecucion != null) {
             System.out.println("\n[CPU] Ejecutando: " + procesoEnEjecucion.getNombre() 
-                               + " | Tiempo restante previo: " + procesoEnEjecucion.getTiempoEjecucion());
+                               + " | Modo actual: " + procesoEnEjecucion.getModo()
+                               + " | Tiempo restante previo: " + procesoEnEjecucion.getTiempoRestante());
 
-            // Determinamos cuánto tiempo ejecutará en esta ráfaga
-            int tiempoEjecutado = Math.min(procesoEnEjecucion.getTiempoEjecucion(), quantum);
-            procesoEnEjecucion.setTiempoEjecucion(procesoEnEjecucion.getTiempoEjecucion() - tiempoEjecutado);
+            // Si le quedan 4 unidades y no ha hecho E/S, se bloquea 1 sola vez
+            if (procesoEnEjecucion.getTiempoRestante() == 4 && !procesoEnEjecucion.isRealizoIO()) {
+                procesoEnEjecucion.setRealizoIO(true);
+                simularLlamadaAlSistema(procesoEnEjecucion, "Solicitud Lectura de Disco");
+                bloquearProcesoActual("Esperando datos del disco");
+                
+                if (!colaBloqueados.estaVacia()) {
+                    desbloquearProceso();
+                }
+                return; 
+            }
+
+            int tiempoEjecutado = Math.min(procesoEnEjecucion.getTiempoRestante(), quantum);
+            procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - tiempoEjecutado);
+            procesoEnEjecucion.setPc(procesoEnEjecucion.getPc() + tiempoEjecutado);
 
             System.out.println("[CPU] Se usaron " + tiempoEjecutado + " unidades de Quantum.");
 
-            // Evaluación de salida
-            if (procesoEnEjecucion.getTiempoEjecucion() <= 0) {
+            if (procesoEnEjecucion.getTiempoRestante() <= 0) {
                 procesoEnEjecucion.setEstado(EstadoProceso.TERMINADO);
                 colaTerminados.encolar(procesoEnEjecucion);
                 System.out.println("[ESTADO] Proceso " + procesoEnEjecucion.getNombre() + " TERMINÓ su ejecución.");
-                procesoEnEjecucion = null; // Liberar CPU
+                procesoEnEjecucion = null;
             } else {
-                // Preempción: Expiró el quantum y el proceso reingresa a la cola de listos
                 procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
                 colaListos.encolar(procesoEnEjecucion);
                 System.out.println("[ESTADO] Expiró Quantum. Proceso " + procesoEnEjecucion.getNombre() 
-                                   + " reingresa a LISTOS. Tiempo restante: " + procesoEnEjecucion.getTiempoEjecucion());
-                procesoEnEjecucion = null; // Liberar CPU para alternar
+                                   + " reingresa a LISTOS. Tiempo restante: " + procesoEnEjecucion.getTiempoRestante());
+                procesoEnEjecucion = null;
+            }
+
+            if (!colaBloqueados.estaVacia()) {
+                desbloquearProceso();
             }
         }
     }
 
-    // Ejecuta todos los procesos de la cola de listos hasta completar todos los trabajos
     public void ejecutarSimulacionCompleta() {
+        admitirProcesos();
         System.out.println("\n================ INICIANDO PLANIFICACIÓN ROUND ROBIN (Quantum = " + quantum + ") ================");
-        while (!colaListos.estaVacia() || procesoEnEjecucion != null) {
+        while (!colaListos.estaVacia() || !colaBloqueados.estaVacia() || procesoEnEjecucion != null) {
             ejecutarCiclo();
         }
         System.out.println("\n================ SIMULACIÓN COMPLETADA ================");
     }
 
-    // Getters
-    public int getQuantum() {
-        return quantum;
-    }
-
-    public void setQuantum(int quantum) {
-        this.quantum = quantum;
-    }
-
-    public Cola<Proceso> getColaListos() {
-        return colaListos;
-    }
-
-    public Cola<Proceso> getColaTerminados() {
-        return colaTerminados;
-    }
+    public int getQuantum() { return quantum; }
+    public void setQuantum(int quantum) { this.quantum = quantum; }
+    public Cola<Proceso> getColaTrabajos() { return colaTrabajos; }
+    public Cola<Proceso> getColaListos() { return colaListos; }
+    public Cola<Proceso> getColaBloqueados() { return colaBloqueados; }
+    public Cola<Proceso> getColaTerminados() { return colaTerminados; }
+    public Proceso getProcesoEnEjecucion() { return procesoEnEjecucion; }
 }
