@@ -24,8 +24,10 @@ public class Proceso {
 
     // Bandera para evitar bucle infinito de E/S
     private boolean realizoIO;
+    private int memoriaRequerida;
+    
 
-    public Proceso(int id, String nombre, int tiempoEjecucion, int prioridad, int idUsuario, int idPadre, int indiceTablaProcesos) {
+    public Proceso(int id, String nombre, int tiempoEjecucion, int prioridad, int idUsuario, int idPadre, int indiceTablaProcesos, int memoriaRequerida) {
         this.id = id;
         this.nombre = nombre;
         this.tiempoEjecucion = tiempoEjecucion;
@@ -37,6 +39,7 @@ public class Proceso {
         this.estado = EstadoProceso.NUEVO;
         this.modo = ModoEjecucion.USUARIO;
         this.realizoIO = false;
+        this.memoriaRequerida = memoriaRequerida;
 
         this.pc = 0;
         this.psw = "OK";
@@ -44,8 +47,8 @@ public class Proceso {
         this.registrosCPU = new int[4];
     }
 
-    public Proceso(int id, String nombre, int tiempoEjecucion, int prioridad, int idUsuario, int idPadre) {
-        this(id, nombre, tiempoEjecucion, prioridad, idUsuario, idPadre, id);
+    public Proceso(int id, String nombre, int tiempoEjecucion, int prioridad, int idUsuario, int idPadre,int memoriaRequerida) {
+        this(id, nombre, tiempoEjecucion, prioridad, idUsuario, idPadre, id, memoriaRequerida);
     }
 
     // --- GETTERS Y SETTERS ---
@@ -82,6 +85,9 @@ public class Proceso {
 
     public int[] getRegistrosCPU() { return registrosCPU; }
     public void setRegistrosCPU(int[] registrosCPU) { this.registrosCPU = registrosCPU; }
+    
+    public int getMemoriaRequerida() { return memoriaRequerida; }
+    public void setMemoriaRequerida(int memoriaRequerida) { this.memoriaRequerida = memoriaRequerida; }
 
     public boolean isRealizoIO() { return realizoIO; }
     public void setRealizoIO(boolean realizoIO) { this.realizoIO = realizoIO; }

@@ -3,6 +3,7 @@ package procesos;
 import edd.Cola;
 import politicas.PoliticaPlanificacion;
 import politicas.PoliticaRoundRobin;
+import hardware.Computador;
 
 public class Planificador {
 
@@ -31,6 +32,12 @@ public class Planificador {
     public Planificador(int quantum) {
         this(quantum, new PoliticaRoundRobin());
     }
+    private Computador computador; // Referencia al computador que gestiona la RAM
+
+    public void setComputador(Computador computador) {
+    this.computador = computador;
+}
+    
 
     public void setPolitica(PoliticaPlanificacion politica) {
         this.politica = politica;
@@ -44,12 +51,32 @@ public class Planificador {
     }
 
     public void admitirProcesos() {
-        while (!colaTrabajos.estaVacia()) {
-            Proceso p = colaTrabajos.desencolar();
+       int tamañoInicial = colaTrabajos.getTamano();
+
+    for (int i = 0; i < tamañoInicial; i++) {
+        Proceso p = (Proceso) colaTrabajos.desencolar();
+
+        if (computador != null) {
+            // 1. Si supera la RAM MÁXIMA (2000 MB > 1024 MB), no se vuelve a encolar (se descarta)
+            if (p.getMemoriaRequerida() > computador.getMemoriaTotal()) {
+                System.out.println("[DESCARTO] Proceso " + p.getNombre() + " excede la RAM total de la máquina.");
+            } 
+            // 2. Si cabe y hay RAM libre, entra a Cola Listos
+            else if (computador.admitirProceso(p)) {
+                p.setEstado(EstadoProceso.LISTO);
+                colaListos.encolar(p);
+                System.out.println("[LISTO] Proceso admitido en cola de listos: " + p.getNombre());
+            } 
+            // 3. Si cabe en el PC pero la RAM está llena por ahora, se reingresa a Trabajos a esperar
+            else {
+                colaTrabajos.encolar(p);
+                System.out.println("[RECHAZADO] Memoria insuficiente por el momento para: " + p.getNombre());
+            }
+        } else {
             p.setEstado(EstadoProceso.LISTO);
             colaListos.encolar(p);
-            System.out.println("[LISTO] Proceso admitido en cola de listos: " + p.getNombre());
         }
+    } 
     }
 
     public void simularLlamadaAlSistema(Proceso p, String operacion) {
@@ -97,8 +124,9 @@ public class Planificador {
             procesoEnEjecucion = politica.seleccionarSiguienteProceso(colaListos);
             if (procesoEnEjecucion != null) {
                 procesoEnEjecucion.setEstado(EstadoProceso.EJECUCION);
+                
+    }
             }
-        }
 
         if (procesoEnEjecucion != null) {
             System.out.println("\n[CPU] Ejecutando: " + procesoEnEjecucion.getNombre() 
