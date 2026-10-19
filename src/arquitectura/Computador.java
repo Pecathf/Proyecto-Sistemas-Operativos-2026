@@ -2,11 +2,11 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package hardware;
+package arquitectura;
 
 /**
  *
- * @author PECA
+ * @author Jabri
  */
 import procesos.Planificador;
 import procesos.Proceso;
