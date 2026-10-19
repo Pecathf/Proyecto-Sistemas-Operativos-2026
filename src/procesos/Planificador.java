@@ -3,7 +3,8 @@ package procesos;
 import edd.Cola;
 import politicas.PoliticaPlanificacion;
 import politicas.PoliticaRoundRobin;
-import hardware.Computador;
+import politicas.PoliticaPrioridadApropiativa;
+import politicas.PoliticaEDF;
 
 public class Planificador {
 
@@ -13,9 +14,10 @@ public class Planificador {
     private Cola<Proceso> colaTerminados; 
     
     private Proceso procesoEnEjecucion;
+    private Proceso ultimoTerminado;
     private int quantum;
+    private int quantumActual;
     
-    // PATRÓN STRATEGY
     private PoliticaPlanificacion politica;
 
     public Planificador(int quantum, PoliticaPlanificacion politica) {
@@ -24,164 +26,140 @@ public class Planificador {
         this.colaBloqueados = new Cola<>();
         this.colaTerminados = new Cola<>();
         this.procesoEnEjecucion = null;
+        this.ultimoTerminado = null;
         this.quantum = quantum;
+        this.quantumActual = 0;
         this.politica = politica;
     }
 
-    // Constructor por defecto usando Round Robin
     public Planificador(int quantum) {
         this(quantum, new PoliticaRoundRobin());
     }
-    private Computador computador; // Referencia al computador que gestiona la RAM
-
-    public void setComputador(Computador computador) {
-    this.computador = computador;
-}
-    
 
     public void setPolitica(PoliticaPlanificacion politica) {
         this.politica = politica;
-        System.out.println("\n[CONFIG] Política de planificación cambiada a: " + politica.getClass().getSimpleName());
+        // Si hay un proceso en ejecución, se devuelve a listos para reevaluar con la nueva política
+        if(procesoEnEjecucion != null) {
+            procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
+            colaListos.encolar(procesoEnEjecucion);
+            procesoEnEjecucion = null;
+        }
     }
 
     public void crearProceso(Proceso p) {
-        p.setEstado(EstadoProceso.NUEVO);
-        colaTrabajos.encolar(p);
-        System.out.println("[TRABAJOS] Proceso encolado en Trabajos: " + p.getNombre() + " (PID: " + p.getId() + ")");
+        p.setEstado(EstadoProceso.LISTO);
+        colaListos.encolar(p); 
     }
 
     public void admitirProcesos() {
-       int tamañoInicial = colaTrabajos.getTamano();
-
-    for (int i = 0; i < tamañoInicial; i++) {
-        Proceso p = (Proceso) colaTrabajos.desencolar();
-
-        if (computador != null) {
-            // 1. Si supera la RAM MÁXIMA (2000 MB > 1024 MB), no se vuelve a encolar (se descarta)
-            if (p.getMemoriaRequerida() > computador.getMemoriaTotal()) {
-                System.out.println("[DESCARTO] Proceso " + p.getNombre() + " excede la RAM total de la máquina.");
-            } 
-            // 2. Si cabe y hay RAM libre, entra a Cola Listos
-            else if (computador.admitirProceso(p)) {
-                p.setEstado(EstadoProceso.LISTO);
-                colaListos.encolar(p);
-                System.out.println("[LISTO] Proceso admitido en cola de listos: " + p.getNombre());
-            } 
-            // 3. Si cabe en el PC pero la RAM está llena por ahora, se reingresa a Trabajos a esperar
-            else {
-                colaTrabajos.encolar(p);
-                System.out.println("[RECHAZADO] Memoria insuficiente por el momento para: " + p.getNombre());
-            }
-        } else {
+        while (!colaTrabajos.estaVacia()) {
+            Proceso p = colaTrabajos.desencolar();
             p.setEstado(EstadoProceso.LISTO);
             colaListos.encolar(p);
         }
-    } 
     }
 
     public void simularLlamadaAlSistema(Proceso p, String operacion) {
-        System.out.println("   [SYSCALL / TRAP] " + p.getNombre() + " solicita: " + operacion);
         p.setModo(ModoEjecucion.NUCLEO);
-        System.out.println("   --> [MODO NUCLEO ACTIVADO] Ejecutando rutina del Kernel...");
         p.setModo(ModoEjecucion.USUARIO);
-        System.out.println("   --> Operación finalizada. Retornando a MODO USUARIO.");
     }
 
     public void bloquearProcesoActual(String razon) {
         if (procesoEnEjecucion != null) {
             procesoEnEjecucion.setEstado(EstadoProceso.BLOQUEADO);
             colaBloqueados.encolar(procesoEnEjecucion);
-            System.out.println("   [BLOQUEO] Proceso " + procesoEnEjecucion.getNombre() 
-                               + " pasa a BLOQUEADO por: " + razon);
             procesoEnEjecucion = null; 
         }
     }
 
-    public void desbloquearProceso() {
-        if (!colaBloqueados.estaVacia()) {
-            Proceso p = colaBloqueados.desencolar();
-            p.setEstado(EstadoProceso.LISTO);
-            colaListos.encolar(p);
-            System.out.println("   [INTERRUPCIÓN E/S] Proceso " + p.getNombre() 
-                               + " completó E/S y regresa a LISTOS.");
+    public void desbloquearProcesoEspecifico(Proceso p) {
+        Cola<Proceso> aux = new Cola<>();
+        boolean encontrado = false;
+        while (!colaBloqueados.estaVacia()) {
+            Proceso actual = colaBloqueados.desencolar();
+            if (actual.getId() == p.getId() && !encontrado) {
+                p.setEstado(EstadoProceso.LISTO);
+                colaListos.encolar(p);
+                encontrado = true;
+            } else {
+                aux.encolar(actual);
+            }
+        }
+        while (!aux.estaVacia()) {
+            colaBloqueados.encolar(aux.desencolar());
         }
     }
 
     public void ejecutarCiclo() {
-        if (colaListos.estaVacia() && procesoEnEjecucion == null) {
-            if (!colaBloqueados.estaVacia()) {
-                System.out.println("\n[CPU INACTIVA] Esperando dispositivos de E/S...");
-                desbloquearProceso();
-                return;
-            } else {
-                System.out.println("No hay procesos pendientes.");
-                return;
+        // 1. Lógica específica para EDF: Reducir deadline de todos los procesos en LISTO
+        if (politica instanceof PoliticaEDF) {
+            Cola<Proceso> aux = new Cola<>();
+            while (!colaListos.estaVacia()) {
+                Proceso p = colaListos.desencolar();
+                p.setDeadline(p.getDeadline() - 1);
+                if (p.getDeadline() <= 0) {
+                    p.setEstado(EstadoProceso.TERMINADO);
+                    colaTerminados.encolar(p);
+                    ultimoTerminado = p;
+                } else {
+                    aux.encolar(p);
+                }
+            }
+            while (!aux.estaVacia()) {
+                colaListos.encolar(aux.desencolar());
             }
         }
 
-        // Selección del siguiente proceso usando la política (STRATEGY)
+        // 2. Selección del siguiente proceso a ejecutar
         if (procesoEnEjecucion == null && !colaListos.estaVacia()) {
             procesoEnEjecucion = politica.seleccionarSiguienteProceso(colaListos);
             if (procesoEnEjecucion != null) {
                 procesoEnEjecucion.setEstado(EstadoProceso.EJECUCION);
-                
-    }
+                quantumActual = 0;
             }
+        }
 
+        // 3. Ejecución del proceso actual
         if (procesoEnEjecucion != null) {
-            System.out.println("\n[CPU] Ejecutando: " + procesoEnEjecucion.getNombre() 
-                               + " | Modo actual: " + procesoEnEjecucion.getModo()
-                               + " | Tiempo restante previo: " + procesoEnEjecucion.getTiempoRestante());
-
-            if (procesoEnEjecucion.getTiempoRestante() == 4 && !procesoEnEjecucion.isRealizoIO()) {
-                procesoEnEjecucion.setRealizoIO(true);
-                simularLlamadaAlSistema(procesoEnEjecucion, "Solicitud Lectura de Disco");
-                bloquearProcesoActual("Esperando datos del disco");
-                
-                if (!colaBloqueados.estaVacia()) {
-                    desbloquearProceso();
-                }
-                return; 
+            if(politica instanceof PoliticaEDF) {
+                procesoEnEjecucion.setDeadline(procesoEnEjecucion.getDeadline() - 1);
             }
 
-            // Si la política usa Quantum (RR), se limita por el quantum, de lo contrario ejecuta todo su tiempo
-            int tiempoEjecutado = politica.usaQuantum() 
-                    ? Math.min(procesoEnEjecucion.getTiempoRestante(), quantum) 
-                    : procesoEnEjecucion.getTiempoRestante();
+            procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - 1);
+            procesoEnEjecucion.setPc(procesoEnEjecucion.getPc() + 1);
+            quantumActual++;
 
-            procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - tiempoEjecutado);
-            procesoEnEjecucion.setPc(procesoEnEjecucion.getPc() + tiempoEjecutado);
-
-            System.out.println("[CPU] Se usaron " + tiempoEjecutado + " unidades de tiempo.");
-
-            if (procesoEnEjecucion.getTiempoRestante() <= 0) {
+            // Verificar condiciones de salida o desalojo
+            if (procesoEnEjecucion.getTiempoRestante() <= 0 || procesoEnEjecucion.getDeadline() <= 0) {
                 procesoEnEjecucion.setEstado(EstadoProceso.TERMINADO);
                 colaTerminados.encolar(procesoEnEjecucion);
-                System.out.println("[ESTADO] Proceso " + procesoEnEjecucion.getNombre() + " TERMINÓ su ejecución.");
+                ultimoTerminado = procesoEnEjecucion; 
                 procesoEnEjecucion = null;
-            } else {
+            } 
+            else if (politica.usaQuantum() && quantumActual >= quantum) {
                 procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
                 colaListos.encolar(procesoEnEjecucion);
-                System.out.println("[ESTADO] Expiró ráfaga. Proceso " + procesoEnEjecucion.getNombre() 
-                                   + " reingresa a LISTOS. Tiempo restante: " + procesoEnEjecucion.getTiempoRestante());
                 procesoEnEjecucion = null;
-            }
-
-            if (!colaBloqueados.estaVacia()) {
-                desbloquearProceso();
+            } 
+            else if (politica instanceof PoliticaPrioridadApropiativa) {
+                Proceso masPrioritario = politica.seleccionarSiguienteProceso(colaListos);
+                if (masPrioritario != null) {
+                    // Se asume que menor número = mayor prioridad
+                    if (masPrioritario.getPrioridad() < procesoEnEjecucion.getPrioridad()) {
+                        procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
+                        colaListos.encolar(procesoEnEjecucion);
+                        procesoEnEjecucion = masPrioritario;
+                        procesoEnEjecucion.setEstado(EstadoProceso.EJECUCION);
+                    } else {
+                        colaListos.encolar(masPrioritario);
+                    }
+                }
             }
         }
     }
 
-    public void ejecutarSimulacionCompleta() {
-        admitirProcesos();
-        System.out.println("\n================ INICIANDO PLANIFICACIÓN (" + politica.getClass().getSimpleName() + ") ================");
-        while (!colaListos.estaVacia() || !colaBloqueados.estaVacia() || procesoEnEjecucion != null) {
-            ejecutarCiclo();
-        }
-        System.out.println("\n================ SIMULACIÓN COMPLETADA ================");
-    }
-
+    public Proceso getUltimoTerminado() { return ultimoTerminado; }
+    public void limpiarUltimoTerminado() { this.ultimoTerminado = null; }
     public int getQuantum() { return quantum; }
     public void setQuantum(int quantum) { this.quantum = quantum; }
     public PoliticaPlanificacion getPolitica() { return politica; }

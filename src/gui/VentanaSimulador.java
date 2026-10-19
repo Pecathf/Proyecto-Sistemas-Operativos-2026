@@ -138,7 +138,7 @@ public class VentanaSimulador extends JFrame {
             int prioridad = Integer.parseInt(txtPrioridad.getText());
             int memoriaRequerida = Integer.parseInt(txtMemoria.getText());
 
-            Proceso p = new Proceso(contadorPID++, nombre, tiempo, prioridad, 1000, 0, memoriaRequerida);
+            Proceso p = new Proceso(contadorPID++, nombre, tiempo, prioridad, memoriaRequerida);
             planificador.crearProceso(p);
 
             txtNombre.setText("Proceso " + contadorPID);
