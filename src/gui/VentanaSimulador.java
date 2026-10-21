@@ -117,7 +117,7 @@ public class VentanaSimulador extends JFrame {
     actualizarVistas();
 });
         btnPaso.addActionListener(e -> {
-            planificador.ejecutarCiclo();
+            planificador.ejecutarCiclo(NORMAL);
             actualizarVistas();
         });
         comboPolitica.addActionListener(e -> cambiarPolitica());
