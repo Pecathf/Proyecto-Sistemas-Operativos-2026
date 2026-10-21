@@ -13,7 +13,7 @@ import javax.swing.*;
 import java.awt.*;
 import politicas.*;
 import procesos.*;
-import hardware.Computador;
+import arquitectura.Computador;
 
 
 public class VentanaSimulador extends JFrame {
