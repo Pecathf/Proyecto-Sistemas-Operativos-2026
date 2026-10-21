@@ -51,7 +51,7 @@ public class Computador {
 
     public void procesarCicloReloj() {
         if (this.kernelLocal != null) {
-            this.kernelLocal.ejecutarCiclo();
+            this.kernelLocal.ejecutarCiclo(memoriaTotal);
         }
     }
     public void liberarProceso(Proceso p) {

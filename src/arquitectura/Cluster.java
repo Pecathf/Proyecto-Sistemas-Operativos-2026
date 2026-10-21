@@ -53,7 +53,7 @@ public class Cluster {
         
         for (int i = 0; i < nodos.getTamano(); i++) {
             Computador nodo = (Computador) nodos.obtener(i);
-            nodo.getKernelLocal().ejecutarCiclo();
+            nodo.getKernelLocal().ejecutarCiclo(relojGlobal);
         }
     }
 
