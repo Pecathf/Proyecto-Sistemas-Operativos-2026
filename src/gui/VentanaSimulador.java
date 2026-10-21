@@ -13,13 +13,10 @@ import javax.swing.*;
 import java.awt.*;
 import politicas.*;
 import procesos.*;
-import arquitectura.Computador;
-
 
 public class VentanaSimulador extends JFrame {
 
     private Planificador planificador;
-    private Computador computador;
 
     // Componentes visuales para las colas
     private DefaultListModel<String> modeloTrabajos;
@@ -29,19 +26,19 @@ public class VentanaSimulador extends JFrame {
     private JLabel lblCPU;
 
     // Componentes de control
-    private JTextField txtNombre, txtTiempo, txtPrioridad, txtQuantum, txtMemoria;
+    private JTextField txtNombre, txtTiempo, txtPrioridad, txtQuantum;
     private JComboBox<String> comboPolitica;
     private int contadorPID = 1;
-
+    private int cicloRelojGUI = 1;
     public VentanaSimulador() {
         setTitle("ÁvilaOS - Simulador de Planificación de Procesos");
         setSize(950, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
-        this.computador = new Computador("PC-1", 1024, new PoliticaRoundRobin());
-        
-        this.planificador = computador.getKernelLocal();
+
+        // Inicializar planificador por defecto (Round Robin, Quantum = 3)
+        planificador = new Planificador(3, new PoliticaRoundRobin());
 
         // --- PANEL SUPERIOR: Formularios y Controles ---
         JPanel panelSuperior = new JPanel(new GridLayout(2, 1, 5, 5));
@@ -54,7 +51,6 @@ public class VentanaSimulador extends JFrame {
         txtTiempo = new JTextField("5", 4);
         txtPrioridad = new JTextField("1", 4);
         JButton btnAgregar = new JButton("Agregar Proceso");
-        txtMemoria = new JTextField("128", 5); 
 
         panelCrear.add(new JLabel("Nombre:"));
         panelCrear.add(txtNombre);
@@ -63,8 +59,6 @@ public class VentanaSimulador extends JFrame {
         panelCrear.add(new JLabel("Prioridad:"));
         panelCrear.add(txtPrioridad);
         panelCrear.add(btnAgregar);
-        panelCrear.add(new JLabel("Memoria (MB):"));
-        panelCrear.add(txtMemoria);
 
         // Fila 2: Configuración de Política y Ejecución
         JPanel panelControl = new JPanel(new FlowLayout());
@@ -113,11 +107,14 @@ public class VentanaSimulador extends JFrame {
         // --- EVENTOS ---
         btnAgregar.addActionListener(e -> agregarProceso());
         btnAdmitir.addActionListener(e -> {
-    admitirProcesosConRAM();
-    actualizarVistas();
-});
+            // Ya no hace falta llamar a admitirProcesos() en el planificador directo
+            // El nuevo crearProceso() lo pone directo en listos para esta prueba
+            actualizarVistas();
+        });
+        
         btnPaso.addActionListener(e -> {
-            planificador.ejecutarCiclo(NORMAL);
+            // Ahora le pasamos el ciclo actual y lo incrementamos
+            planificador.ejecutarCiclo(cicloRelojGUI++);
             actualizarVistas();
         });
         comboPolitica.addActionListener(e -> cambiarPolitica());
@@ -136,9 +133,8 @@ public class VentanaSimulador extends JFrame {
             String nombre = txtNombre.getText();
             int tiempo = Integer.parseInt(txtTiempo.getText());
             int prioridad = Integer.parseInt(txtPrioridad.getText());
-            int memoriaRequerida = Integer.parseInt(txtMemoria.getText());
 
-            Proceso p = new Proceso(contadorPID++, nombre, tiempo, prioridad, memoriaRequerida);
+            Proceso p = new Proceso(contadorPID++, nombre, tiempo, prioridad, 1024);  //Ese 1024 se reemplaza más adelante en la interfaz por el valor que se ponga en la interfaz.
             planificador.crearProceso(p);
 
             txtNombre.setText("Proceso " + contadorPID);
@@ -148,53 +144,6 @@ public class VentanaSimulador extends JFrame {
         }
     }
 
-    // PEGA ESTE NUEVO MÉTODO JUSTO AQUÍ:
-   private void admitirProcesosConRAM() {
-        edd.Cola<Proceso> colaTrabajos = computador.getKernelLocal().getColaTrabajos();
-        edd.Cola<Proceso> aux = new edd.Cola<>();
-        boolean sinMemoria = false;
-        boolean procesoInviable = false;
-
-        // 1. Procesamos la admisión de trabajos
-        while (!colaTrabajos.estaVacia()) {
-            Proceso p = colaTrabajos.desencolar();
-
-            // ❌ Caso 1: Supera la RAM MÁXIMA (ej. 2000 MB > 1024 MB) -> Se descarta (no vuelve a aux)
-            if (p.getMemoriaRequerida() > computador.getMemoriaTotal()) {
-                procesoInviable = true;
-            } 
-            // ✅ Caso 2: Cabe y hay RAM libre -> El Computador lo ingresa a Cola Listos
-            else if (computador.admitirProceso(p)) {
-                // Se descuenta la RAM y se mueve a kernelLocal.getColaListos()
-            } 
-            // ⚠️ Caso 3: Cabe en la máquina pero la RAM está llena por ahora -> Retener en aux
-            else {
-                aux.encolar(p);
-                sinMemoria = true;
-            }
-        }
-
-        // 2. Regresamos a Trabajos los procesos que están esperando espacio en RAM
-        while (!aux.estaVacia()) {
-            colaTrabajos.encolar(aux.desencolar());
-        }
-
-        // 3. Actualizar la interfaz visual con los cambios
-        actualizarVistas();
-
-        // 4. Mostrar notificaciones al usuario (una sola vez)
-        if (procesoInviable) {
-            JOptionPane.showMessageDialog(this, 
-                "Uno o más procesos superan la RAM total del computador (" + computador.getMemoriaTotal() + " MB) y fueron descartados.", 
-                "Proceso Inviable", JOptionPane.ERROR_MESSAGE);
-        }
-
-        if (sinMemoria) {
-            JOptionPane.showMessageDialog(this, 
-                "Memoria RAM insuficiente para admitir algunos procesos. Permanecen en la Cola de Trabajos.", 
-                "Alerta de Memoria", JOptionPane.WARNING_MESSAGE);
-        }
-    }
     private void cambiarPolitica() {
         String seleccion = (String) comboPolitica.getSelectedItem();
         try {
