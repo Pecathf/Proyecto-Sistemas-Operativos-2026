@@ -3,12 +3,13 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package arquitectura;
-import edd.ListaEnlazada;
-import procesos.Proceso;
+
 /**
  *
  * @author Jabri
  */
+import edd.ListaEnlazada;
+import procesos.Proceso;
 
 public class Cluster {
     private ListaEnlazada<Computador> computadores;

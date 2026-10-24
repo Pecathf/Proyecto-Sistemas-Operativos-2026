@@ -1,278 +1,387 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package gui;
 
-/**
- *
- * @author Jabri
- */
+import arquitectura.Cluster;
+import arquitectura.Computador;
+import arquitectura.RelojGlobal;
+import arquitectura.GeneradorID;
+import procesos.Proceso;
+import politicas.*;
 
 import javax.swing.*;
+import javax.swing.border.TitledBorder;
 import java.awt.*;
-import politicas.*;
-import procesos.*;
-import hardware.Computador;
-
 
 public class VentanaSimulador extends JFrame {
 
-    private Planificador planificador;
-    private Computador computador;
+    private Cluster cluster;
+    private RelojGlobal reloj;
 
-    // Componentes visuales para las colas
-    private DefaultListModel<String> modeloTrabajos;
-    private DefaultListModel<String> modeloListos;
-    private DefaultListModel<String> modeloBloqueados;
-    private DefaultListModel<String> modeloTerminados;
-    private JLabel lblCPU;
+    // Componentes de Control Global
+    private JLabel lblReloj;
+    private JTextArea txtLogs;
+    private JProgressBar barUsoCPUGlobal;
+    private JProgressBar barUsoRAMGlobal;
 
-    // Componentes de control
-    private JTextField txtNombre, txtTiempo, txtPrioridad, txtQuantum, txtMemoria;
-    private JComboBox<String> comboPolitica;
-    private int contadorPID = 1;
+    // Componentes para Crear Proceso
+    private JTextField txtNombreProceso, txtTiempoProceso, txtPrioridadProceso, txtRamProceso;
+    private JComboBox<String> comboComputadores;
 
-    public VentanaSimulador() {
-        setTitle("ÁvilaOS - Simulador de Planificación de Procesos");
-        setSize(950, 600);
+    // Colors del Tema Dashboard Oscuro
+    private static final Color COLOR_FONDO_VENTANA = new Color(24, 28, 38);
+    private static final Color COLOR_PANEL = new Color(34, 40, 52);
+    private static final Color COLOR_PANEL_INTERNO = new Color(20, 24, 32);
+    private static final Color COLOR_TEXTO_PRINCIPAL = new Color(230, 235, 245);
+    private static final Color COLOR_TEXTO_SECUNDARIO = new Color(170, 180, 200);
+    private static final Color COLOR_BORDE = new Color(55, 65, 85);
+    private static final Color COLOR_ACENTO_VERDE = new Color(0, 200, 115);
+    private static final Color COLOR_ACENTO_AZUL = new Color(41, 121, 255);
+
+    // Timer de Swing
+    private javax.swing.Timer timerRefrescoGUI;
+
+    public VentanaSimulador(Cluster cluster, RelojGlobal reloj) {
+        this.cluster = cluster;
+        this.reloj = reloj;
+
+        setTitle("ÁvilaOS - Simulador de Sistema Operativo Distribuido");
+        setSize(1350, 850);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        setLayout(new BorderLayout(10, 10));
-        this.computador = new Computador("PC-1", 1024, new PoliticaRoundRobin());
-        
-        this.planificador = computador.getKernelLocal();
+        setLayout(new BorderLayout(12, 12));
 
-        // --- PANEL SUPERIOR: Formularios y Controles ---
-        JPanel panelSuperior = new JPanel(new GridLayout(2, 1, 5, 5));
-        
-        // Fila 1: Crear Proceso
-        JPanel panelCrear = new JPanel(new FlowLayout());
-        panelCrear.setBorder(BorderFactory.createTitledBorder("Crear Nuevo Proceso"));
-        
-        txtNombre = new JTextField("Proceso " + contadorPID, 10);
-        txtTiempo = new JTextField("5", 4);
-        txtPrioridad = new JTextField("1", 4);
-        JButton btnAgregar = new JButton("Agregar Proceso");
-        txtMemoria = new JTextField("128", 5); 
+        // Fondo Principal
+        getContentPane().setBackground(COLOR_FONDO_VENTANA);
 
-        panelCrear.add(new JLabel("Nombre:"));
-        panelCrear.add(txtNombre);
-        panelCrear.add(new JLabel("Tiempo (CPU):"));
-        panelCrear.add(txtTiempo);
-        panelCrear.add(new JLabel("Prioridad:"));
-        panelCrear.add(txtPrioridad);
+        // 1. PANEL SUPERIOR: Formularios de Control
+        add(crearPanelSuperiorBarraControl(), BorderLayout.NORTH);
+
+        // 2. PANEL CENTRAL: Cluster de Computadores
+        add(crearPanelClusterNodos(), BorderLayout.CENTER);
+
+        // 3. PANEL DERECHO: Logs y Métricas
+        add(crearPanelMétricasYLogs(), BorderLayout.EAST);
+
+        // Iniciar temporizador visual
+        iniciarTimerRefresco();
+    }
+
+    private JPanel crearPanelSuperiorBarraControl() {
+        JPanel panelContenedor = new JPanel(new GridLayout(2, 1, 8, 8));
+        panelContenedor.setOpaque(false);
+
+        // --- FILA 1: Formulario para Crear Proceso ---
+        JPanel panelCrear = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 8));
+        panelCrear.setBackground(COLOR_PANEL);
+        panelCrear.setBorder(crearBordeTitutlado("Crear y Asignar Nuevo Proceso"));
+
+        txtNombreProceso = crearTextField("Proceso_" + GeneradorID.generar(), 8);
+        txtTiempoProceso = crearTextField("5", 4);
+        txtPrioridadProceso = crearTextField("1", 4);
+        txtRamProceso = crearTextField("1024", 5);
+
+        comboComputadores = new JComboBox<>();
+        comboComputadores.setBackground(COLOR_PANEL_INTERNO);
+        comboComputadores.setForeground(COLOR_TEXTO_PRINCIPAL);
+        comboComputadores.addItem("Automático (Mejor RAM)");
+        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
+            comboComputadores.addItem(cluster.getComputador(i).getNombre());
+        }
+
+        JButton btnAgregar = new JButton("Crear Proceso");
+        btnAgregar.setBackground(COLOR_ACENTO_VERDE);
+        btnAgregar.setForeground(Color.WHITE);
+        btnAgregar.setFont(new Font("SansSerif", Font.BOLD, 12));
+        btnAgregar.setFocusPainted(false);
+        btnAgregar.addActionListener(e -> agregarNuevoProceso());
+
+        panelCrear.add(crearLabel("Nombre:"));
+        panelCrear.add(txtNombreProceso);
+        panelCrear.add(crearLabel("Tiempo CPU:"));
+        panelCrear.add(txtTiempoProceso);
+        panelCrear.add(crearLabel("Prioridad:"));
+        panelCrear.add(txtPrioridadProceso);
+        panelCrear.add(crearLabel("RAM (MB):"));
+        panelCrear.add(txtRamProceso);
+        panelCrear.add(crearLabel("Asignar a:"));
+        panelCrear.add(comboComputadores);
         panelCrear.add(btnAgregar);
-        panelCrear.add(new JLabel("Memoria (MB):"));
-        panelCrear.add(txtMemoria);
 
-        // Fila 2: Configuración de Política y Ejecución
-        JPanel panelControl = new JPanel(new FlowLayout());
-        panelControl.setBorder(BorderFactory.createTitledBorder("Control del Sistema"));
+        // --- FILA 2: Control del Reloj ---
+        JPanel panelRelojControl = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 6));
+        panelRelojControl.setBackground(COLOR_PANEL);
+        panelRelojControl.setBorder(crearBordeTitutlado("Estado y Control del Reloj Global"));
 
-        comboPolitica = new JComboBox<>(new String[]{"Round Robin", "FCFS", "SJF"});
-        txtQuantum = new JTextField("3", 4);
-        JButton btnPaso = new JButton("Ejecutar Ciclo (Paso a Paso)");
-        JButton btnAdmitir = new JButton("Admitir a Listos");
+        lblReloj = new JLabel("Reloj de Simulación: Ciclo 0", SwingConstants.CENTER);
+        lblReloj.setFont(new Font("SansSerif", Font.BOLD, 15));
+        lblReloj.setForeground(COLOR_ACENTO_VERDE);
 
-        panelControl.add(new JLabel("Política:"));
-        panelControl.add(comboPolitica);
-        panelControl.add(new JLabel("Quantum:"));
-        panelControl.add(txtQuantum);
-        panelControl.add(btnAdmitir);
-        panelControl.add(btnPaso);
+        panelRelojControl.add(lblReloj);
 
-        panelSuperior.add(panelCrear);
-        panelSuperior.add(panelControl);
-        add(panelSuperior, BorderLayout.NORTH);
+        panelContenedor.add(panelCrear);
+        panelContenedor.add(panelRelojControl);
 
-        // --- PANEL CENTRAL: Visualización de Colas y CPU ---
-        JPanel panelCentral = new JPanel(new GridLayout(1, 5, 5, 5));
+        return panelContenedor;
+    }
 
-        modeloTrabajos = new DefaultListModel<>();
-        modeloListos = new DefaultListModel<>();
-        modeloBloqueados = new DefaultListModel<>();
-        modeloTerminados = new DefaultListModel<>();
+    private JPanel crearPanelMétricasYLogs() {
+        JPanel panelMétricas = new JPanel(new BorderLayout(8, 8));
+        panelMétricas.setPreferredSize(new Dimension(360, 0));
+        panelMétricas.setBackground(COLOR_PANEL);
+        panelMétricas.setBorder(crearBordeTitutlado("Métricas y Eventos Globales"));
 
-        panelCentral.add(crearPanelCola("1. Cola Trabajos", modeloTrabajos));
-        panelCentral.add(crearPanelCola("2. Cola Listos", modeloListos));
-        
-        // Panel CPU dedicado
-        JPanel panelCPU = new JPanel(new BorderLayout());
-        panelCPU.setBorder(BorderFactory.createTitledBorder("CPU (Ejecución)"));
-        lblCPU = new JLabel("CPU LIBRE", SwingConstants.CENTER);
-        lblCPU.setFont(new Font("Arial", Font.BOLD, 13));
-        panelCPU.add(lblCPU, BorderLayout.CENTER);
-        panelCentral.add(panelCPU);
+        // Barras Globales
+        JPanel panelBarras = new JPanel(new GridLayout(2, 1, 6, 6));
+        panelBarras.setOpaque(false);
+        barUsoCPUGlobal = crearBarraProgresiva("Uso de CPU Global", COLOR_ACENTO_AZUL);
+        barUsoRAMGlobal = crearBarraProgresiva("Ocupación RAM Cluster", new Color(255, 145, 0));
+        panelBarras.add(barUsoCPUGlobal);
+        panelBarras.add(barUsoRAMGlobal);
 
-        panelCentral.add(crearPanelCola("3. Cola Bloqueados", modeloBloqueados));
-        panelCentral.add(crearPanelCola("4. Terminados", modeloTerminados));
+        // Caja de Logs
+        txtLogs = new JTextArea();
+        txtLogs.setEditable(false);
+        txtLogs.setBackground(COLOR_PANEL_INTERNO);
+        txtLogs.setForeground(COLOR_TEXTO_PRINCIPAL);
+        txtLogs.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        txtLogs.setCaretColor(Color.WHITE);
+        JScrollPane scrollLogs = new JScrollPane(txtLogs);
+        scrollLogs.setBorder(BorderFactory.createLineBorder(COLOR_BORDE));
 
-        add(panelCentral, BorderLayout.CENTER);
+        panelMétricas.add(panelBarras, BorderLayout.NORTH);
+        panelMétricas.add(scrollLogs, BorderLayout.CENTER);
 
-        // --- EVENTOS ---
-        btnAgregar.addActionListener(e -> agregarProceso());
-        btnAdmitir.addActionListener(e -> {
-    admitirProcesosConRAM();
-    actualizarVistas();
-});
-        btnPaso.addActionListener(e -> {
-            planificador.ejecutarCiclo();
-            actualizarVistas();
+        return panelMétricas;
+    }
+
+    private JPanel crearPanelClusterNodos() {
+        JPanel panelNodosContainer = new JPanel(new GridLayout(1, cluster.getCantidadComputadores(), 12, 12));
+        panelNodosContainer.setOpaque(false);
+
+        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
+            Computador nodo = cluster.getComputador(i);
+            panelNodosContainer.add(crearPanelTarjetaNodo(nodo));
+        }
+
+        JScrollPane scrollNodos = new JScrollPane(panelNodosContainer);
+        scrollNodos.setOpaque(false);
+        scrollNodos.getViewport().setOpaque(false);
+        scrollNodos.setBorder(null);
+
+        return panelNodosContainer;
+    }
+
+    private JPanel crearPanelTarjetaNodo(Computador nodo) {
+        JPanel tarjeta = new JPanel(new BorderLayout(6, 6));
+        tarjeta.setBackground(COLOR_PANEL);
+        tarjeta.setBorder(crearBordeTitutlado(nodo.getNombre()));
+
+        // Encabezado del Nodo (Política + RAM)
+        JPanel headerNodo = new JPanel(new GridLayout(2, 1, 4, 4));
+        headerNodo.setOpaque(false);
+
+        JComboBox<String> comboPolitica = new JComboBox<>(new String[]{"Round Robin", "FCFS", "SJF", "EDF", "Prioridad"});
+        comboPolitica.setBackground(COLOR_PANEL_INTERNO);
+        comboPolitica.setForeground(COLOR_TEXTO_PRINCIPAL);
+        comboPolitica.addActionListener(e -> {
+            String sel = (String) comboPolitica.getSelectedItem();
+            switch (sel) {
+                case "FCFS": nodo.getPlanificador().setPolitica(new PoliticaFCFS()); break;
+                case "SJF": nodo.getPlanificador().setPolitica(new PoliticaSJF()); break;
+                case "EDF": nodo.getPlanificador().setPolitica(new PoliticaEDF()); break;
+                case "Prioridad": nodo.getPlanificador().setPolitica(new PoliticaPrioridadApropiativa()); break;
+                default: nodo.getPlanificador().setPolitica(new PoliticaRoundRobin()); break;
+            }
         });
-        comboPolitica.addActionListener(e -> cambiarPolitica());
+
+        JProgressBar barRAMNodo = new JProgressBar(0, nodo.getRamTotal());
+        barRAMNodo.setName("barRAM_" + nodo.getNombre());
+        barRAMNodo.setStringPainted(true);
+        barRAMNodo.setForeground(COLOR_ACENTO_VERDE);
+        barRAMNodo.setBackground(COLOR_PANEL_INTERNO);
+
+        headerNodo.add(comboPolitica);
+        headerNodo.add(barRAMNodo);
+        tarjeta.add(headerNodo, BorderLayout.NORTH);
+
+        // Colas de Trabajo
+        JPanel panelColas = new JPanel(new GridLayout(1, 5, 4, 4));
+        panelColas.setOpaque(false);
+
+        panelColas.add(crearSubPanelCola("Nuevos", "lstNuevos_" + nodo.getNombre()));
+        panelColas.add(crearSubPanelCola("Listos", "lstListos_" + nodo.getNombre()));
+        panelColas.add(crearSubPanelCola("CPU", "lstCPU_" + nodo.getNombre()));
+        panelColas.add(crearSubPanelCola("Bloqueados", "lstBloq_" + nodo.getNombre()));
+        panelColas.add(crearSubPanelCola("Terminados", "lstTerm_" + nodo.getNombre()));
+
+        tarjeta.add(panelColas, BorderLayout.CENTER);
+
+        return tarjeta;
     }
 
-    private JPanel crearPanelCola(String titulo, DefaultListModel<String> modelo) {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder(titulo));
-        JList<String> lista = new JList<>(modelo);
-        panel.add(new JScrollPane(lista), BorderLayout.CENTER);
-        return panel;
+    private JPanel crearSubPanelCola(String titulo, String nombreComponente) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBackground(COLOR_PANEL_INTERNO);
+        p.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(COLOR_BORDE), titulo,
+            TitledBorder.CENTER, TitledBorder.TOP, new Font("SansSerif", Font.BOLD, 10), COLOR_TEXTO_SECUNDARIO));
+
+        DefaultListModel<String> model = new DefaultListModel<>();
+        JList<String> lista = new JList<>(model);
+        lista.setName(nombreComponente);
+        lista.setBackground(COLOR_PANEL_INTERNO);
+        lista.setForeground(COLOR_TEXTO_PRINCIPAL);
+        lista.setFont(new Font("SansSerif", Font.PLAIN, 10));
+
+        JScrollPane sp = new JScrollPane(lista);
+        sp.setBorder(null);
+
+        p.add(sp, BorderLayout.CENTER);
+        return p;
     }
 
-    private void agregarProceso() {
+    private JLabel crearLabel(String texto) {
+        JLabel label = new JLabel(texto);
+        label.setForeground(COLOR_TEXTO_PRINCIPAL);
+        label.setFont(new Font("SansSerif", Font.BOLD, 11));
+        return label;
+    }
+
+    private JTextField crearTextField(String textoInicial, int columnas) {
+        JTextField tf = new JTextField(textoInicial, columnas);
+        tf.setBackground(COLOR_PANEL_INTERNO);
+        tf.setForeground(COLOR_TEXTO_PRINCIPAL);
+        tf.setCaretColor(Color.WHITE);
+        tf.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(COLOR_BORDE),
+            BorderFactory.createEmptyBorder(2, 4, 2, 4)
+        ));
+        return tf;
+    }
+
+    private void agregarNuevoProceso() {
         try {
-            String nombre = txtNombre.getText();
-            int tiempo = Integer.parseInt(txtTiempo.getText());
-            int prioridad = Integer.parseInt(txtPrioridad.getText());
-            int memoriaRequerida = Integer.parseInt(txtMemoria.getText());
+            String nombre = txtNombreProceso.getText().trim();
+            int tiempo = Integer.parseInt(txtTiempoProceso.getText().trim());
+            int prioridad = Integer.parseInt(txtPrioridadProceso.getText().trim());
+            int ram = Integer.parseInt(txtRamProceso.getText().trim());
 
-            Proceso p = new Proceso(contadorPID++, nombre, tiempo, prioridad, 1000, 0, memoriaRequerida);
-            planificador.crearProceso(p);
+            int id = GeneradorID.generar();
+            Proceso p = new Proceso(id, nombre, tiempo, prioridad, ram);
 
-            txtNombre.setText("Proceso " + contadorPID);
-            actualizarVistas();
+            int seleccionDestino = comboComputadores.getSelectedIndex();
+            int cicloActual = reloj.getCicloActual();
+
+            if (seleccionDestino == 0) {
+                cluster.asignarProcesoAutomatico(p, cicloActual);
+                registrarLog("Proceso " + nombre + " (RAM: " + ram + "MB) asignado AUTOMÁTICAMENTE.");
+            } else {
+                int idxComputador = seleccionDestino - 1;
+                cluster.asignarProcesoManual(p, idxComputador, cicloActual);
+                registrarLog("Proceso " + nombre + " asignado a " + cluster.getComputador(idxComputador).getNombre());
+            }
+
+            txtNombreProceso.setText("Proceso_" + GeneradorID.generar());
+
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Por favor ingrese valores numéricos válidos en tiempo y prioridad.");
+            JOptionPane.showMessageDialog(this, "Por favor ingrese valores numéricos válidos.", "Error de Formato", JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    // PEGA ESTE NUEVO MÉTODO JUSTO AQUÍ:
-   private void admitirProcesosConRAM() {
-        edd.Cola<Proceso> colaTrabajos = computador.getKernelLocal().getColaTrabajos();
-        edd.Cola<Proceso> aux = new edd.Cola<>();
-        boolean sinMemoria = false;
-        boolean procesoInviable = false;
+    private void iniciarTimerRefresco() {
+        timerRefrescoGUI = new javax.swing.Timer(250, e -> refrescarInterfaz());
+        timerRefrescoGUI.start();
+    }
 
-        // 1. Procesamos la admisión de trabajos
-        while (!colaTrabajos.estaVacia()) {
-            Proceso p = colaTrabajos.desencolar();
+    private void refrescarInterfaz() {
+        lblReloj.setText("Reloj de Simulación: Ciclo " + reloj.getCicloActual());
 
-            // ❌ Caso 1: Supera la RAM MÁXIMA (ej. 2000 MB > 1024 MB) -> Se descarta (no vuelve a aux)
-            if (p.getMemoriaRequerida() > computador.getMemoriaTotal()) {
-                procesoInviable = true;
-            } 
-            // ✅ Caso 2: Cabe y hay RAM libre -> El Computador lo ingresa a Cola Listos
-            else if (computador.admitirProceso(p)) {
-                // Se descuenta la RAM y se mueve a kernelLocal.getColaListos()
-            } 
-            // ⚠️ Caso 3: Cabe en la máquina pero la RAM está llena por ahora -> Retener en aux
-            else {
-                aux.encolar(p);
-                sinMemoria = true;
+        int ramUsadaTotal = 0;
+        int ramCapacidadTotal = 0;
+
+        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
+            Computador nodo = cluster.getComputador(i);
+            ramUsadaTotal += nodo.getRamUsada();
+            ramCapacidadTotal += nodo.getRamTotal();
+
+            JProgressBar barRAM = findComponentByName(this, "barRAM_" + nodo.getNombre(), JProgressBar.class);
+            if (barRAM != null) {
+                barRAM.setValue(nodo.getRamUsada());
+                barRAM.setString("RAM: " + nodo.getRamUsada() + " / " + nodo.getRamTotal() + " MB");
+            }
+
+            actualizarListaGUI("lstListos_" + nodo.getNombre(), nodo.getPlanificador().getColaListos());
+            actualizarListaGUI("lstBloq_" + nodo.getNombre(), nodo.getPlanificador().getColaBloqueados());
+            actualizarListaGUI("lstTerm_" + nodo.getNombre(), nodo.getPlanificador().getColaTerminados());
+
+            JList<String> lstCPU = findComponentByName(this, "lstCPU_" + nodo.getNombre(), JList.class);
+            if (lstCPU != null) {
+                DefaultListModel<String> model = (DefaultListModel<String>) lstCPU.getModel();
+                model.clear();
+                Proceso ejec = nodo.getPlanificador().getProcesoEnEjecucion();
+                if (ejec != null) {
+                    model.addElement(">> " + ejec.getNombre() + " (T:" + ejec.getTiempoRestante() + ")");
+                }
             }
         }
 
-        // 2. Regresamos a Trabajos los procesos que están esperando espacio en RAM
+        if (ramCapacidadTotal > 0) {
+            int pctRAM = (int) (((double) ramUsadaTotal / ramCapacidadTotal) * 100);
+            barUsoRAMGlobal.setValue(pctRAM);
+            barUsoRAMGlobal.setString("RAM Cluster: " + pctRAM + "%");
+        }
+    }
+
+    private void actualizarListaGUI(String nombreComponente, edd.Cola<Proceso> colaOrigen) {
+        JList<String> lst = findComponentByName(this, nombreComponente, JList.class);
+        if (lst == null) return;
+
+        DefaultListModel<String> model = (DefaultListModel<String>) lst.getModel();
+        model.clear();
+
+        edd.Cola<Proceso> aux = new edd.Cola<>();
+        while (!colaOrigen.estaVacia()) {
+            Proceso p = colaOrigen.desencolar();
+            model.addElement(p.getNombre() + " (T:" + p.getTiempoRestante() + ")");
+            aux.encolar(p);
+        }
         while (!aux.estaVacia()) {
-            colaTrabajos.encolar(aux.desencolar());
-        }
-
-        // 3. Actualizar la interfaz visual con los cambios
-        actualizarVistas();
-
-        // 4. Mostrar notificaciones al usuario (una sola vez)
-        if (procesoInviable) {
-            JOptionPane.showMessageDialog(this, 
-                "Uno o más procesos superan la RAM total del computador (" + computador.getMemoriaTotal() + " MB) y fueron descartados.", 
-                "Proceso Inviable", JOptionPane.ERROR_MESSAGE);
-        }
-
-        if (sinMemoria) {
-            JOptionPane.showMessageDialog(this, 
-                "Memoria RAM insuficiente para admitir algunos procesos. Permanecen en la Cola de Trabajos.", 
-                "Alerta de Memoria", JOptionPane.WARNING_MESSAGE);
-        }
-    }
-    private void cambiarPolitica() {
-        String seleccion = (String) comboPolitica.getSelectedItem();
-        try {
-            int q = Integer.parseInt(txtQuantum.getText());
-            planificador.setQuantum(q);
-        } catch (NumberFormatException e) {
-            // Mantiene el quantum actual si el texto es inválido
-        }
-
-        switch (seleccion) {
-            case "FCFS":
-                planificador.setPolitica(new PoliticaFCFS());
-                break;
-            case "SJF":
-                planificador.setPolitica(new PoliticaSJF());
-                break;
-            default:
-                planificador.setPolitica(new PoliticaRoundRobin());
-                break;
+            colaOrigen.encolar(aux.desencolar());
         }
     }
 
-    private void actualizarVistas() {
-        modeloTrabajos.clear();
-        modeloListos.clear();
-        modeloBloqueados.clear();
-        modeloTerminados.clear();
+    private void registrarLog(String mensaje) {
+        txtLogs.append("[Ciclo " + reloj.getCicloActual() + "] " + mensaje + "\n");
+        txtLogs.setCaretPosition(txtLogs.getDocument().getLength());
+    }
 
-        // 1. Recorrer Cola de Trabajos
-        edd.Cola<Proceso> auxTrabajos = new edd.Cola<>();
-        while (!planificador.getColaTrabajos().estaVacia()) {
-            Proceso p = planificador.getColaTrabajos().desencolar();
-            modeloTrabajos.addElement(p.getNombre() + " (T: " + p.getTiempoRestante() + ")");
-            auxTrabajos.encolar(p);
+    @SuppressWarnings("unchecked")
+    private <T extends Component> T findComponentByName(Container container, String name, Class<T> type) {
+        for (Component c : container.getComponents()) {
+            if (name.equals(c.getName()) && type.isInstance(c)) {
+                return (T) c;
+            }
+            if (c instanceof Container) {
+                T found = findComponentByName((Container) c, name, type);
+                if (found != null) return found;
+            }
         }
-        while (!auxTrabajos.estaVacia()) {
-            planificador.getColaTrabajos().encolar(auxTrabajos.desencolar());
-        }
+        return null;
+    }
 
-        // 2. Recorrer Cola de Listos
-        edd.Cola<Proceso> auxListos = new edd.Cola<>();
-        while (!planificador.getColaListos().estaVacia()) {
-            Proceso p = planificador.getColaListos().desencolar();
-            modeloListos.addElement(p.getNombre() + " (T: " + p.getTiempoRestante() + ")");
-            auxListos.encolar(p);
-        }
-        while (!auxListos.estaVacia()) {
-            planificador.getColaListos().encolar(auxListos.desencolar());
-        }
+    private JProgressBar crearBarraProgresiva(String titulo, Color color) {
+        JProgressBar pb = new JProgressBar(0, 100);
+        pb.setValue(0);
+        pb.setStringPainted(true);
+        pb.setString(titulo + ": 0%");
+        pb.setForeground(color);
+        pb.setBackground(COLOR_PANEL_INTERNO);
+        return pb;
+    }
 
-        // 3. Recorrer Cola de Bloqueados
-        edd.Cola<Proceso> auxBloqueados = new edd.Cola<>();
-        while (!planificador.getColaBloqueados().estaVacia()) {
-            Proceso p = planificador.getColaBloqueados().desencolar();
-            modeloBloqueados.addElement(p.getNombre() + " (T: " + p.getTiempoRestante() + ")");
-            auxBloqueados.encolar(p);
-        }
-        while (!auxBloqueados.estaVacia()) {
-            planificador.getColaBloqueados().encolar(auxBloqueados.desencolar());
-        }
-
-        // 4. Recorrer Cola de Terminados
-        edd.Cola<Proceso> auxTerminados = new edd.Cola<>();
-        while (!planificador.getColaTerminados().estaVacia()) {
-            Proceso p = planificador.getColaTerminados().desencolar();
-            modeloTerminados.addElement(p.getNombre());
-            auxTerminados.encolar(p);
-        }
-        while (!auxTerminados.estaVacia()) {
-            planificador.getColaTerminados().encolar(auxTerminados.desencolar());
-        }
-
-        // 5. Estado de la CPU
-        Proceso enEjecucion = planificador.getProcesoEnEjecucion();
-        if (enEjecucion != null) {
-            lblCPU.setText("<html><center><b>" + enEjecucion.getNombre() + "</b><br>Modo: " + enEjecucion.getModo() + "<br>T. Restante: " + enEjecucion.getTiempoRestante() + "</center></html>");
-        } else {
-            lblCPU.setText("CPU LIBRE");
-        }
+    private TitledBorder crearBordeTitutlado(String titulo) {
+        return BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(COLOR_BORDE, 1),
+            titulo, TitledBorder.LEFT, TitledBorder.TOP,
+            new Font("SansSerif", Font.BOLD, 12), COLOR_TEXTO_PRINCIPAL);
     }
 }
