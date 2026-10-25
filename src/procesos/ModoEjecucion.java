@@ -11,6 +11,5 @@ package procesos;
 
 public enum ModoEjecucion {
     USUARIO,
-    SISTEMA_OPERATIVO
+    NUCLEO
 }
-
