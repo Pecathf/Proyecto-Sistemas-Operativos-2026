@@ -12,58 +12,43 @@ import edd.ListaEnlazada;
 import procesos.Proceso;
 
 public class Cluster {
-    private ListaEnlazada nodos;
-    private int relojGlobal;
+    private ListaEnlazada<Computador> computadores;
 
     public Cluster() {
-        this.nodos = new ListaEnlazada();
-        this.relojGlobal = 0;
+        this.computadores = new ListaEnlazada<>();
     }
 
-    // Registra una nueva computadora físicamente aislada en la red
-    public void agregarNodo(Computador computador) {
-        if (computador != null) {
-            this.nodos.agregar(computador);
+    public void agregarComputador(Computador c) {
+        computadores.agregar(c);
+    }
+
+    // Asignación Manual: El usuario elige en la GUI (ej: 0 para Computador 1, 1 para Computador 2)
+    public void asignarProcesoManual(Proceso p, int indiceComputador, int cicloActual) {
+        if (indiceComputador >= 0 && indiceComputador < computadores.getTamano()) {
+            computadores.obtener(indiceComputador).recibirProceso(p, cicloActual);
         }
     }
 
-    // Intenta despachar el proceso buscando el primer nodo con RAM suficiente (First-Fit)
-    public boolean despacharProceso(Proceso p) {
-        if (p == null) return false;
+    // Asignación Automática (Balanceo de carga por Memoria RAM disponible)
+    public void asignarProcesoAutomatico(Proceso p, int cicloActual) {
+        if (computadores.estaVacia()) return;
 
-        for (int i = 0; i < nodos.getTamano(); i++) {
-            Computador nodo = (Computador) nodos.obtener(i);
-            
-            // Intenta cargar el proceso en el nodo (asigna RAM y lo encola en su Kernel local)
-            if (nodo.admitirProceso(p)) {
-                System.out.println("Proceso " + p.getId() + " [RAM: " + p.getMemoriaRequerida() + 
-                                   "MB] asignado al Nodo " + nodo.getIdComputador());
-                return true;
+        Computador mejorOpcion = computadores.obtener(0);
+        for (int i = 1; i < computadores.getTamano(); i++) {
+            Computador actual = computadores.obtener(i);
+            // Elige el computador con más RAM libre en ese momento
+            if (actual.getRamLibre() > mejorOpcion.getRamLibre()) {
+                mejorOpcion = actual;
             }
         }
-
-        System.out.println("Admitir proceso " + p.getId() + " falló: Ningún nodo dispone de " + 
-                           p.getMemoriaRequerida() + "MB de RAM libres.");
-        return false;
+        mejorOpcion.recibirProceso(p, cicloActual);
     }
 
-    // Avanza un tick en el reloj del cluster y en la CPU de todos los nodos
-    public void ejecutarCicloGlobal() {
-        this.relojGlobal++;
-        
-        for (int i = 0; i < nodos.getTamano(); i++) {
-            Computador nodo = (Computador) nodos.obtener(i);
-            nodo.getKernelLocal().ejecutarCiclo();
-        }
-    }
-
-    public ListaEnlazada getNodos() {
-        return nodos;
-    }
-
-    public int getRelojGlobal() {
-        return relojGlobal;
+    public Computador getComputador(int indice) {
+        return computadores.obtener(indice);
     }
     
-    
+    public int getCantidadComputadores() {
+        return computadores.getTamano();
+    }
 }

@@ -8,64 +8,93 @@ package arquitectura;
  *
  * @author Jabri
  */
+
+
 import procesos.Planificador;
 import procesos.Proceso;
 import politicas.PoliticaPlanificacion;
-public class Computador {
-    private String idComputador;
-    private int memoriaTotal;
-    private int memoriaDisponible;
-    private Planificador kernelLocal;
+import edd.Cola;
 
-    public Computador(String idComputador, int memoriaTotal, PoliticaPlanificacion politicaInicial) {
-        this.idComputador = idComputador;
-        this.memoriaTotal = memoriaTotal;
-        this.memoriaDisponible = memoriaTotal;
-        this.kernelLocal= new Planificador(3, politicaInicial);
-        this.kernelLocal.setPolitica(politicaInicial);
+public class Computador extends Thread {
+    private String nombre;
+    private int ramTotal;
+    private int ramUsada;
+    private Planificador planificador;
+    private Cola<Proceso> colaNuevos;
+    private RelojGlobal reloj;
+    private boolean activo;
+
+    public Computador(String nombre, int ramTotal, int quantum, PoliticaPlanificacion politicaInicial) {
+        this.nombre = nombre;
+        this.ramTotal = ramTotal;
+        this.ramUsada = 0;
+        this.planificador = new Planificador(quantum, politicaInicial);
+        this.colaNuevos = new Cola<>();
+        this.activo = true;
     }
 
-    public boolean admitirProceso(Proceso p) {
-        if (p.getMemoriaRequerida() <= this.memoriaDisponible) {
-        this.memoriaDisponible -= p.getMemoriaRequerida();
-        
-        // ❌ Antes: this.kernelLocal.crearProceso(p); (Lo devolvía a Trabajos)
-        // ✅ Ahora: Lo encolamos directamente en la Cola de Listos
-        this.kernelLocal.getColaListos().encolar(p); 
-        
-        System.out.println("[MEMORIA " + idComputador + "] Proceso " + p.getId() + 
-                           " admitido (" + p.getMemoriaRequerida() + " MB). RAM libre: " + 
-                           memoriaDisponible + " MB");
-        return true;
-    }
-    System.out.println("[RECHAZO " + idComputador + "] RAM insuficiente para Proceso " + p.getId() + 
-                       " (Requiere: " + p.getMemoriaRequerida() + " MB, Libre: " + memoriaDisponible + " MB)");
-    return false;
+    public void setReloj(RelojGlobal reloj) {
+        this.reloj = reloj;
     }
 
-    public void liberarMemoria(Proceso p) {
-        this.memoriaDisponible += p.getMemoriaRequerida();
-        System.out.println("[MEMORIA " + idComputador + "] Proceso " + p.getId() + 
-                           " liberó " + p.getMemoriaRequerida() + " MB. RAM libre: " + memoriaDisponible + " MB");
+    public synchronized void recibirProceso(Proceso p, int cicloActual) {
+        p.setCicloLlegada(cicloActual);
+        colaNuevos.encolar(p);
     }
 
-    public void procesarCicloReloj() {
-        if (this.kernelLocal != null) {
-            this.kernelLocal.ejecutarCiclo();
+    private synchronized void admitirProcesosSiHayMemoria() {
+        Cola<Proceso> aux = new Cola<>();
+        while (!colaNuevos.estaVacia()) {
+            Proceso p = colaNuevos.desencolar();
+            if (ramUsada + p.getMemoriaRequerida() <= ramTotal) {
+                ramUsada += p.getMemoriaRequerida();
+                planificador.crearProceso(p);
+            } else {
+                aux.encolar(p);
+            }
+        }
+        while (!aux.estaVacia()) {
+            colaNuevos.encolar(aux.desencolar());
         }
     }
-    public void liberarProceso(Proceso p) {
-    if (p != null) {
-        this.memoriaDisponible += p.getMemoriaRequerida();
-        // Asegurarse de que no supere el total de RAM del equipo
-        if (this.memoriaDisponible > this.memoriaTotal) {
-            this.memoriaDisponible = this.memoriaTotal;
+
+    public synchronized void liberarMemoria(int cantidad) {
+        this.ramUsada -= cantidad;
+        if (this.ramUsada < 0) this.ramUsada = 0;
+    }
+
+    @Override
+    public void run() {
+        while (activo) {
+            try {
+                // 1. Esperar la señal del Reloj Global
+                reloj.esperarInicioCiclo();
+                
+                int cicloActual = reloj.getCicloActual();
+                
+                // 2. Ejecutar la lógica del computador (AHORA SÍ EN PARALELO)
+                admitirProcesosSiHayMemoria();
+                planificador.ejecutarCiclo(cicloActual);
+                
+                if (planificador.getUltimoTerminado() != null) {
+                    liberarMemoria(planificador.getUltimoTerminado().getMemoriaRequerida());
+                    planificador.limpiarUltimoTerminado();
+                }
+                
+                // 3. Avisar al Reloj que este computador ya terminó su trabajo por este ciclo
+                reloj.notificarFinCiclo();
+                
+            } catch (InterruptedException e) {
+                System.out.println(nombre + " fue interrumpido.");
+            }
         }
     }
-}
+    
+    public void apagar() { this.activo = false; }
 
-    public Planificador getKernelLocal() { return kernelLocal; }
-    public String getIdComputador() { return idComputador; }
-    public int getMemoriaDisponible() { return memoriaDisponible; }
-    public int getMemoriaTotal() { return memoriaTotal; }
+    public String getNombre() { return nombre; }
+    public Planificador getPlanificador() { return planificador; }
+    public int getRamLibre() { return ramTotal - ramUsada; }
+    public int getRamUsada() { return ramUsada; }
+    public int getRamTotal() { return ramTotal; }
 }
