@@ -1,4 +1,8 @@
 package procesos;
+/**
+ *
+ * @author Jabri
+ */
 
 import edd.Cola;
 import politicas.PoliticaPlanificacion;
