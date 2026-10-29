@@ -1,5 +1,8 @@
 package gui;
-
+/**
+ *
+ * @author Jabri
+ */
 import arquitectura.Cluster;
 import arquitectura.Computador;
 import arquitectura.GeneradorID;
@@ -133,9 +136,13 @@ public class VentanaSimulador extends JFrame {
         panelRelojControl.add(btnCrearBuffer);
 
         // --- FILA 2: Formulario Completo de Creación de Procesos ("Vista 1") ---
-        JPanel panelCrear = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        // BoxLayout en Y: campos base arriba y campos de Productor/Consumidor/IO abajo,
+        // para que al aparecer no desborden por el bug de altura preferida de FlowLayout.
+        JPanel panelCrear = new JPanel();
+        panelCrear.setLayout(new BoxLayout(panelCrear, BoxLayout.Y_AXIS));
         panelCrear.setBackground(COLOR_PANEL);
         panelCrear.setBorder(crearBordeTitulado("Creación y Asignación de Procesos (Vista 1)"));
+        panelCrear.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         txtNombreProceso = crearTextField("P_" + GeneradorID.generar(), 7);
         txtTiempoProceso = crearTextField("6", 3);
@@ -163,29 +170,35 @@ public class VentanaSimulador extends JFrame {
         txtFrecuenciaIO = crearTextField("3", 3);
         txtDuracionIO = crearTextField("2", 3);
 
-        panelCamposEspeciales = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        panelCamposEspeciales = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
         panelCamposEspeciales.setOpaque(false);
+        panelCamposEspeciales.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JButton btnAgregar = new JButton("Crear Proceso");
         estilarBoton(btnAgregar, COLOR_VERDE);
         btnAgregar.addActionListener(e -> accionCrearProceso());
 
-        panelCrear.add(crearLabel("Nombre:"));
-        panelCrear.add(txtNombreProceso);
-        panelCrear.add(crearLabel("Tipo:"));
-        panelCrear.add(comboTipoProceso);
-        panelCrear.add(crearLabel("Tiempo CPU:"));
-        panelCrear.add(txtTiempoProceso);
-        panelCrear.add(crearLabel("Prioridad:"));
-        panelCrear.add(txtPrioridadProceso);
-        panelCrear.add(crearLabel("RAM (MB):"));
-        panelCrear.add(txtRamProceso);
-        panelCrear.add(crearLabel("Deadline:"));
-        panelCrear.add(txtDeadlineProceso);
-        panelCrear.add(crearLabel("Destino:"));
-        panelCrear.add(comboComputadores);
+        JPanel filaBase = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        filaBase.setOpaque(false);
+        filaBase.setAlignmentX(Component.LEFT_ALIGNMENT);
+        filaBase.add(crearLabel("Nombre:"));
+        filaBase.add(txtNombreProceso);
+        filaBase.add(crearLabel("Tipo:"));
+        filaBase.add(comboTipoProceso);
+        filaBase.add(crearLabel("Tiempo CPU:"));
+        filaBase.add(txtTiempoProceso);
+        filaBase.add(crearLabel("Prioridad:"));
+        filaBase.add(txtPrioridadProceso);
+        filaBase.add(crearLabel("RAM (MB):"));
+        filaBase.add(txtRamProceso);
+        filaBase.add(crearLabel("Deadline:"));
+        filaBase.add(txtDeadlineProceso);
+        filaBase.add(crearLabel("Destino:"));
+        filaBase.add(comboComputadores);
+        filaBase.add(btnAgregar);
+
+        panelCrear.add(filaBase);
         panelCrear.add(panelCamposEspeciales);
-        panelCrear.add(btnAgregar);
 
         actualizarCamposSegunTipoProceso();
 
@@ -212,8 +225,19 @@ public class VentanaSimulador extends JFrame {
             panelCamposEspeciales.add(crearLabel("Duración E/S:"));
             panelCamposEspeciales.add(txtDuracionIO);
         }
+
+        panelCamposEspeciales.setVisible(panelCamposEspeciales.getComponentCount() > 0);
         panelCamposEspeciales.revalidate();
         panelCamposEspeciales.repaint();
+
+        // Recalcular altura del panel superior (BorderLayout.NORTH) al mostrar/ocultar campos.
+        Container ancestro = panelCamposEspeciales.getParent();
+        while (ancestro != null) {
+            ancestro.revalidate();
+            ancestro.repaint();
+            if (ancestro == getContentPane()) break;
+            ancestro = ancestro.getParent();
+        }
     }
 
     private void actualizarComboComputadores() {

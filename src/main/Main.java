@@ -1,6 +1,9 @@
 package main;
 
-
+/**
+ *
+ * @author Jabri
+ */
 
 import gui.VentanaConfiguracionInicial;
 import javax.swing.SwingUtilities;
