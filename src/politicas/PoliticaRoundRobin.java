@@ -12,6 +12,7 @@ import procesos.Proceso;
 import edd.Cola;
 
 public class PoliticaRoundRobin implements PoliticaPlanificacion {
+
     @Override
     public Proceso seleccionarSiguienteProceso(Cola<Proceso> colaListos) {
         if (!colaListos.estaVacia()) {
@@ -23,5 +24,15 @@ public class PoliticaRoundRobin implements PoliticaPlanificacion {
     @Override
     public boolean usaQuantum() {
         return true;
+    }
+
+    @Override
+    public boolean debeApropiar(Proceso enEjecucion, Cola<Proceso> colaListos) {
+        return false;
+    }
+
+    @Override
+    public TipoPolitica getTipo() {
+        return TipoPolitica.ROUND_ROBIN;
     }
 }
