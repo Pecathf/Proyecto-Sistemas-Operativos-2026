@@ -3,16 +3,29 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/edd/Nodo.java</file>
-            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/procesos/Planificador.java</file>
-            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/procesos/Proceso.java</file>
-            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaPlanificacion.java</file>
-            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaSJF.java</file>
-            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/gui/VentanaSimulador.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/arquitectura/Cluster.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/arquitectura/Computador.java</file>
             <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/arquitectura/GeneradorID.java</file>
             <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/arquitectura/RelojGlobal.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/edd/Cola.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/edd/ListaEnlazada.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/edd/Nodo.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/gui/VentanaSimulador.java</file>
             <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/main/Main.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaEDF.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaFCFS.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaPlanificacion.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaPrioridadApropiativa.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaRoundRobin.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/politicas/PoliticaSJF.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/procesos/EstadoProceso.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/procesos/ModoEjecucion.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/procesos/Planificador.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/procesos/Proceso.java</file>
             <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/sincronizacion/Buffer.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/sincronizacion/Semaforo.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/utilidades/ConfiguracionInicial.java</file>
+            <file>file:/C:/Users/PC/Desktop/Proyecto%20SO/Proyecto-Sistemas-Operativos-2026/src/utilidades/LectorCSV.java</file>
         </group>
     </open-files>
 </project-private>
