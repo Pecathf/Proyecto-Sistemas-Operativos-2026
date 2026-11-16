@@ -15,21 +15,23 @@ import java.util.concurrent.Semaphore;
 public class RelojGlobal extends Thread {
     private ListaEnlazada<Computador> computadores;
     private int cicloActual;
-    private int duracionCicloMs;
-    private boolean enEjecucion;
+    private volatile int duracionCicloMs;
+    private volatile boolean enEjecucion;
+    private volatile boolean pausado;
     
-    // Semáforos para coordinar los hilos de los computadores
+    // Semáforos para coordinar los hilos de los computadores en barrera paralela
     private Semaphore semaforoInicioCiclo;
     private Semaphore semaforoFinCiclo;
 
     public RelojGlobal(int duracionCicloMs) {
         this.computadores = new ListaEnlazada<>();
         this.cicloActual = 0;
-        this.duracionCicloMs = duracionCicloMs;
+        this.duracionCicloMs = Math.max(20, duracionCicloMs);
         this.enEjecucion = true;
+        this.pausado = false;
     }
 
-    public void agregarComputador(Computador c) {
+    public synchronized void agregarComputador(Computador c) {
         computadores.agregar(c);
     }
 
@@ -42,18 +44,30 @@ public class RelojGlobal extends Thread {
         for (int i = 0; i < numComputadores; i++) {
             Computador c = computadores.obtener(i);
             c.setReloj(this);
-            c.start(); // Inicia el Thread del Computador
+            c.start();
         }
         
-        this.start(); // Inicia el Thread del Reloj
+        this.start();
     }
 
     @Override
     public void run() {
-        int numComputadores = computadores.getTamano();
         while (enEjecucion) {
             try {
+                if (pausado) {
+                    Thread.sleep(100);
+                    continue;
+                }
+
                 Thread.sleep(duracionCicloMs);
+                
+                if (pausado) {
+                    continue;
+                }
+
+                int numComputadores = computadores.getTamano();
+                if (numComputadores == 0) continue;
+
                 cicloActual++;
                 
                 // 1. Dar luz verde a todos los computadores para que ejecuten su ciclo en paralelo
@@ -68,12 +82,24 @@ public class RelojGlobal extends Thread {
         }
     }
 
+    public void pausar() { this.pausado = true; }
+    public void reanudar() { this.pausado = false; }
+    public boolean isPausado() { return pausado; }
+
     public void detener() { 
-        enEjecucion = false; 
+        this.enEjecucion = false; 
     }
     
     public int getCicloActual() { 
         return cicloActual; 
+    }
+
+    public int getDuracionCicloMs() { 
+        return duracionCicloMs; 
+    }
+
+    public void setDuracionCicloMs(int duracionCicloMs) { 
+        this.duracionCicloMs = (duracionCicloMs > 20) ? duracionCicloMs : 20; 
     }
     
     // Métodos usados por los Computadores para sincronizarse con el reloj

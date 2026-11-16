@@ -10,11 +10,14 @@ package politicas;
  */
 import procesos.Proceso;
 import edd.Cola;
+import edd.ListaEnlazada;
 
 public class PoliticaEDF implements PoliticaPlanificacion {
+
     @Override
     public Proceso seleccionarSiguienteProceso(Cola<Proceso> colaListos) {
-        if (colaListos.estaVacia()) return null;
+        if (colaListos.estaVacia())
+            return null;
 
         Cola<Proceso> auxiliar = new Cola<>();
         Proceso menorDeadline = colaListos.desencolar();
@@ -43,5 +46,25 @@ public class PoliticaEDF implements PoliticaPlanificacion {
     @Override
     public boolean usaQuantum() {
         return false;
+    }
+
+    @Override
+    public boolean debeApropiar(Proceso enEjecucion, Cola<Proceso> colaListos) {
+        if (enEjecucion == null || colaListos.estaVacia())
+            return false;
+
+        ListaEnlazada<Proceso> lista = colaListos.obtenerListaElementos();
+        for (int i = 0; i < lista.getTamano(); i++) {
+            Proceso p = lista.obtener(i);
+            if (p != null && p.getDeadline() < enEjecucion.getDeadline()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public TipoPolitica getTipo() {
+        return TipoPolitica.EDF;
     }
 }

@@ -10,8 +10,10 @@ package politicas;
  */
 import procesos.Proceso;
 import edd.Cola;
+import edd.ListaEnlazada;
 
 public class PoliticaPrioridadApropiativa implements PoliticaPlanificacion {
+
     @Override
     public Proceso seleccionarSiguienteProceso(Cola<Proceso> colaListos) {
         if (colaListos.estaVacia()) return null;
@@ -22,6 +24,7 @@ public class PoliticaPrioridadApropiativa implements PoliticaPlanificacion {
 
         while (!colaListos.estaVacia()) {
             Proceso p = colaListos.desencolar();
+            // Menor valor numérico representa mayor prioridad (1 es más prioritario que 5)
             if (p.getPrioridad() < mayorPrioridad.getPrioridad()) {
                 mayorPrioridad = p;
             }
@@ -42,6 +45,25 @@ public class PoliticaPrioridadApropiativa implements PoliticaPlanificacion {
 
     @Override
     public boolean usaQuantum() {
-        return false; 
+        return false;
+    }
+
+    @Override
+    public boolean debeApropiar(Proceso enEjecucion, Cola<Proceso> colaListos) {
+        if (enEjecucion == null || colaListos.estaVacia()) return false;
+        
+        ListaEnlazada<Proceso> lista = colaListos.obtenerListaElementos();
+        for (int i = 0; i < lista.getTamano(); i++) {
+            Proceso p = lista.obtener(i);
+            if (p != null && p.getPrioridad() < enEjecucion.getPrioridad()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public TipoPolitica getTipo() {
+        return TipoPolitica.PRIORIDAD_APROPIATIVA;
     }
 }

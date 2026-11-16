@@ -15,11 +15,9 @@ public class PoliticaSJF implements PoliticaPlanificacion {
 
     @Override
     public Proceso seleccionarSiguienteProceso(Cola<Proceso> colaListos) {
-        if (colaListos.estaVacia()) {
+        if (colaListos.estaVacia())
             return null;
-        }
 
-        // Buscar el proceso con el menor tiempo restante en la cola
         Cola<Proceso> auxiliar = new Cola<>();
         Proceso masCorto = colaListos.desencolar();
         auxiliar.encolar(masCorto);
@@ -32,22 +30,30 @@ public class PoliticaSJF implements PoliticaPlanificacion {
             auxiliar.encolar(p);
         }
 
-        // Reconstruir la cola de listos omitiendo el proceso más corto seleccionado
         boolean removido = false;
         while (!auxiliar.estaVacia()) {
             Proceso p = auxiliar.desencolar();
             if (!removido && p.getId() == masCorto.getId()) {
-                removido = true; // Lo extraemos para retornarlo a la CPU
+                removido = true;
             } else {
                 colaListos.encolar(p);
             }
         }
-
         return masCorto;
     }
 
     @Override
     public boolean usaQuantum() {
-        return false; // SJF no utiliza Quantum
+        return false;
+    }
+
+    @Override
+    public boolean debeApropiar(Proceso enEjecucion, Cola<Proceso> colaListos) {
+        return false; // SJF clásico no apropiativo
+    }
+
+    @Override
+    public TipoPolitica getTipo() {
+        return TipoPolitica.SJF;
     }
 }

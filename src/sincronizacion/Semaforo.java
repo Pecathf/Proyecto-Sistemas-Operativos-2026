@@ -3,13 +3,18 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package sincronizacion;
-import edd.Cola;
-import procesos.Proceso;
-import procesos.Planificador;
+
 /**
  *
  * @author Jabri
  */
+
+
+
+import edd.Cola;
+import edd.ListaEnlazada;
+import procesos.EstadoProceso;
+import procesos.Proceso;
 
 public class Semaforo {
     private String nombre;
@@ -22,24 +27,50 @@ public class Semaforo {
         this.colaBloqueados = new Cola<>();
     }
 
-    public synchronized void semWait(Proceso p, Planificador planificadorAnfitrion) {
+    /**
+     * Operación semWait clásica de Dijkstra/Stallings.
+     * @param p Proceso que invoca el wait.
+     * @return true si el proceso puede continuar, false si debe bloquearse.
+     */
+    public synchronized boolean semWait(Proceso p) {
         valor--;
         if (valor < 0) {
+            p.setEstado(EstadoProceso.BLOQUEADO);
             colaBloqueados.encolar(p);
-            planificadorAnfitrion.bloquearProcesoActual("Esperando Semáforo: " + nombre);
+            return false;
         }
+        return true;
     }
 
-    public synchronized void semSignal(Planificador planificadorAnfitrion) {
+    /**
+     * Operación semSignal clásica.
+     * @return El proceso desbloqueado (si existía alguno esperando), o null.
+     */
+    public synchronized Proceso semSignal() {
         valor++;
         if (valor <= 0) {
             if (!colaBloqueados.estaVacia()) {
-                Proceso liberado = colaBloqueados.desencolar();
-                planificadorAnfitrion.desbloquearProcesoEspecifico(liberado);
+                Proceso despierto = colaBloqueados.desencolar();
+                despierto.setEstado(EstadoProceso.LISTO);
+                return despierto;
             }
         }
+        return null;
     }
 
-    public int getValor() { return valor; }
-    public String getNombre() { return nombre; }
+    public synchronized int getValor() {
+        return valor;
+    }
+
+    public String getNombre() {
+        return nombre;
+    }
+
+    public synchronized Cola<Proceso> getColaBloqueados() {
+        return colaBloqueados;
+    }
+
+    public synchronized ListaEnlazada<Proceso> obtenerProcesosBloqueados() {
+        return colaBloqueados.obtenerListaElementos();
+    }
 }

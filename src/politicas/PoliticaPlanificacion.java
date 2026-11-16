@@ -12,9 +12,18 @@ import procesos.Proceso;
 import edd.Cola;
 
 public interface PoliticaPlanificacion {
-    // Devuelve el siguiente proceso que le toca entrar a la CPU según la regla de la política
+
+    // Devuelve el siguiente proceso que le toca entrar a la CPU según la regla de
+    // la política
     Proceso seleccionarSiguienteProceso(Cola<Proceso> colaListos);
-    
+
     // Indica si la política requiere desalojo por Quantum (como Round Robin)
     boolean usaQuantum();
+
+    // Determina si un proceso recién llegado o en cola debe desalojar al proceso en
+    // CPU
+    boolean debeApropiar(Proceso enEjecucion, Cola<Proceso> colaListos);
+
+    // Retorna el tipo de política según el enum obligatorio
+    TipoPolitica getTipo();
 }
