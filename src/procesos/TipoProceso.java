@@ -8,24 +8,23 @@ package procesos;
  *
  * @author Jabri
  */
+
 public enum TipoProceso {
-    CPU_BOUND("CPU Bound"),
-    IO_BOUND("I/O Bound"),
-    PRODUCTOR("Productor"),
-    CONSUMIDOR("Consumidor");
+    CPU_BOUND("CPU-Bound (Cómputo)"),
+    IO_BOUND("I/O-Bound (Archivos / Disco)");
 
-    private final String nombreLegible;
+    private final String descripcion;
 
-    TipoProceso(String nombreLegible) {
-        this.nombreLegible = nombreLegible;
+    TipoProceso(String descripcion) {
+        this.descripcion = descripcion;
     }
 
-    public String getNombreLegible() {
-        return nombreLegible;
+    public String getDescripcion() {
+        return descripcion;
     }
 
     @Override
     public String toString() {
-        return nombreLegible;
+        return descripcion;
     }
 }

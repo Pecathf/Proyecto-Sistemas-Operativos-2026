@@ -3,564 +3,368 @@ package procesos;
  *
  * @author Jabri
  */
-
-import arquitectura.Cluster;
+import archivos.EntradaFS;
+import archivos.PermisoArchivo;
+import archivos.SistemaArchivos;
+import arquitectura.CPU;
 import arquitectura.Computador;
+import disco.DiscoSimulado;
+import disco.SolicitudIO;
+import disco.TipoOperacionIO;
 import edd.Cola;
 import edd.ListaEnlazada;
 import politicas.PoliticaPlanificacion;
-import sincronizacion.Buffer;
+import utilidades.RegistroEventos;
+
+import java.util.concurrent.Semaphore;
 
 public class Planificador {
 
     private Computador computador;
-    private Cluster cluster;
-
-    private Cola<Proceso> colaListos;
-    private Cola<Proceso> colaBloqueados;
-    private Cola<Proceso> colaTerminados;
-    private ListaEnlazada<Proceso> procesosTerminadosEnCiclo;
-
-    private Proceso procesoEnEjecucion;
-    private int quantum;
-    private int quantumActual;
     private PoliticaPlanificacion politica;
+    private int quantum;
+    private RegistroEventos logger;
+    private Semaphore mutexColas;
 
-    public Planificador(int quantum, PoliticaPlanificacion politica) {
-        this.colaListos = new Cola<>();
-        this.colaBloqueados = new Cola<>();
-        this.colaTerminados = new Cola<>();
-        this.procesosTerminadosEnCiclo = new ListaEnlazada<>();
-        this.procesoEnEjecucion = null;
-        this.quantum = quantum;
-        this.quantumActual = 0;
-        this.politica = politica;
-    }
+    // Métricas de Swap (Planificador a Mediano Plazo)
+    private int totalSuspensiones;
+    private int totalReactivaciones;
 
-    public void setComputador(Computador computador) {
+    public Planificador(Computador computador, PoliticaPlanificacion politica, int quantum) {
         this.computador = computador;
+        this.politica = politica;
+        this.quantum = Math.max(1, quantum);
+        this.mutexColas = new Semaphore(1);
+        this.totalSuspensiones = 0;
+        this.totalReactivaciones = 0;
     }
 
-    public void setCluster(Cluster cluster) {
-        this.cluster = cluster;
+    public void setLogger(RegistroEventos logger) {
+        this.logger = logger;
     }
 
-    public synchronized void setPolitica(PoliticaPlanificacion nuevaPolitica) {
-        this.politica = nuevaPolitica;
-        if (procesoEnEjecucion != null) {
-            procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
-            colaListos.encolar(procesoEnEjecucion);
-            procesoEnEjecucion = null;
-        }
-        if (cluster != null && computador != null) {
-            cluster.log(computador.getNombre() + " cambió política de planificación a: " + nuevaPolitica.getTipo());
-        }
-    }
-
-    public synchronized void admitirProcesoListo(Proceso p) {
-        p.setEstado(EstadoProceso.LISTO);
-        p.setModo(ModoEjecucion.USUARIO);
-        colaListos.encolar(p);
-    }
-
-    public synchronized void ejecutarCiclo(int cicloActual) {
-        procesosTerminadosEnCiclo = new ListaEnlazada<>();
-
-        // 1. Aumentar tiempo de espera en Listo para métricas
-        ListaEnlazada<Proceso> listosSnapshot = colaListos.obtenerListaElementos();
-        for (int i = 0; i < listosSnapshot.getTamano(); i++) {
-            listosSnapshot.obtener(i).incrementarTiempoEsperaListo();
-        }
-
-        // 2. Incrementar tiempo de bloqueo en semáforos para métricas
-        ListaEnlazada<Proceso> bloqSnapshot = colaBloqueados.obtenerListaElementos();
-        for (int i = 0; i < bloqSnapshot.getTamano(); i++) {
-            Proceso pb = bloqSnapshot.obtener(i);
-            if (pb.getMotivoBloqueo() == MotivoBloqueo.SEMAFORO_MUTEX ||
-                pb.getMotivoBloqueo() == MotivoBloqueo.SEMAFORO_LLENOS ||
-                pb.getMotivoBloqueo() == MotivoBloqueo.SEMAFORO_VACIOS) {
-                pb.incrementarTiempoBloqueadoSem();
-            }
-        }
-
-        // 3. Control Universal de Deadlines en TODOS los procesos activos
-        revisarDeadlines(cicloActual);
-
-        // 4. Procesar E/S y Latencia de Red en procesos bloqueados
-        procesarBloqueadosPorTiempo(cicloActual);
-
-        // 5. Verificar desalojo preventivo (Apropiación polimórfica)
-        if (procesoEnEjecucion != null && politica.debeApropiar(procesoEnEjecucion, colaListos)) {
-            if (cluster != null) {
-                cluster.log(computador.getNombre() + ": Desalojo por política apropiativa del proceso " + procesoEnEjecucion.getNombre());
-            }
-            procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
-            colaListos.encolar(procesoEnEjecucion);
-            computador.getCpu().liberarProceso();
-            procesoEnEjecucion = null;
-        }
-
-        // 6. Selección de proceso a ejecutar si la CPU está libre
-        if (procesoEnEjecucion == null && !colaListos.estaVacia()) {
-            procesoEnEjecucion = politica.seleccionarSiguienteProceso(colaListos);
-            if (procesoEnEjecucion != null) {
-                procesoEnEjecucion.setEstado(EstadoProceso.EJECUCION);
-                quantumActual = 0;
-                if (procesoEnEjecucion.getCicloPrimeraEjecucion() == -1) {
-                    procesoEnEjecucion.setCicloPrimeraEjecucion(cicloActual);
-                }
-                computador.getCpu().cargarProceso(procesoEnEjecucion);
-            }
-        }
-
-        // 7. Ejecutar ciclo del proceso en CPU
-        if (procesoEnEjecucion != null) {
-            computador.getCpu().ejecutarCiclo(cicloActual);
-            ejecutarInstruccionProceso(cicloActual);
-        } else {
-            computador.getCpu().ejecutarCiclo(cicloActual);
+    private void log(String msg) {
+        if (logger != null) {
+            logger.registrar(msg);
         }
     }
 
-    private void ejecutarInstruccionProceso(int cicloActual) {
-        switch (procesoEnEjecucion.getTipo()) {
-            case CPU_BOUND:
-                ejecutarCpuBound(cicloActual);
-                break;
-            case IO_BOUND:
-                ejecutarIoBound(cicloActual);
-                break;
-            case PRODUCTOR:
-                ejecutarProductor(cicloActual);
-                break;
-            case CONSUMIDOR:
-                ejecutarConsumidor(cicloActual);
-                break;
+    public void setPolitica(PoliticaPlanificacion politica) {
+        this.politica = politica;
+        if (politica != null) {
+            log("Política de planificación CPU cambiada a: " + politica.getTipo().name());
         }
     }
 
-    private void ejecutarCpuBound(int cicloActual) {
-        procesoEnEjecucion.setModo(ModoEjecucion.USUARIO);
-        procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - 1);
-        quantumActual++;
-
-        if (procesoEnEjecucion.getTiempoRestante() <= 0) {
-            finalizarProceso(procesoEnEjecucion, cicloActual, true);
-            computador.getCpu().liberarProceso();
-            procesoEnEjecucion = null;
-        } else if (politica.usaQuantum() && quantumActual >= quantum) {
-            procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
-            colaListos.encolar(procesoEnEjecucion);
-            computador.getCpu().liberarProceso();
-            procesoEnEjecucion = null;
-        }
+    public PoliticaPlanificacion getPolitica() {
+        return politica;
     }
 
-    private void ejecutarIoBound(int cicloActual) {
-        procesoEnEjecucion.setModo(ModoEjecucion.USUARIO);
-        procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - 1);
-        procesoEnEjecucion.setContadorParaIO(procesoEnEjecucion.getContadorParaIO() - 1);
-        quantumActual++;
-
-        if (procesoEnEjecucion.getTiempoRestante() <= 0) {
-            finalizarProceso(procesoEnEjecucion, cicloActual, true);
-            computador.getCpu().liberarProceso();
-            procesoEnEjecucion = null;
-        } else if (procesoEnEjecucion.getContadorParaIO() <= 0) {
-            // Solicita operación de E/S
-            procesoEnEjecucion.setEstado(EstadoProceso.BLOQUEADO);
-            procesoEnEjecucion.setMotivoBloqueo(MotivoBloqueo.ENTRADA_SALIDA);
-            procesoEnEjecucion.setTiempoRestanteIO(procesoEnEjecucion.getDuracionIO());
-            procesoEnEjecucion.setContadorParaIO(procesoEnEjecucion.getCiclosEntreIO());
-            colaBloqueados.encolar(procesoEnEjecucion);
-            if (cluster != null) {
-                cluster.log(procesoEnEjecucion.getNombre() + " bloqueado por operación de E/S (" + procesoEnEjecucion.getDuracionIO() + " ciclos)");
-            }
-            computador.getCpu().liberarProceso();
-            procesoEnEjecucion = null;
-        } else if (politica.usaQuantum() && quantumActual >= quantum) {
-            procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
-            colaListos.encolar(procesoEnEjecucion);
-            computador.getCpu().liberarProceso();
-            procesoEnEjecucion = null;
-        }
+    public void setQuantum(int quantum) {
+        this.quantum = Math.max(1, quantum);
     }
 
-    private void ejecutarProductor(int cicloActual) {
-        Buffer buffer = (cluster != null) ? cluster.buscarBuffer(procesoEnEjecucion.getBufferObjetivo()) : null;
-        if (buffer == null) {
-            ejecutarCpuBound(cicloActual);
-            return;
-        }
+    public int getQuantum() {
+        return quantum;
+    }
 
-        boolean esRemoto = !buffer.getComputadorAnfitrion().equalsIgnoreCase(computador.getNombre());
-        int fase = procesoEnEjecucion.getFaseSincronizacion();
+    /**
+     * Admite un proceso nuevo: si hay RAM va a LISTO; si no hay RAM, intenta suspender
+     * un proceso bloqueado o lo envía directamente a LISTO_SUSPENDIDO.
+     */
+    public void admitirProceso(Proceso p, int cicloActual) {
+        try {
+            mutexColas.acquire();
+            p.setTiempoLlegada(cicloActual);
+            p.setIdComputadorAsignado(computador.getId());
 
-        switch (fase) {
-            case 0: // Produciendo en modo usuario
-                procesoEnEjecucion.setModo(ModoEjecucion.USUARIO);
-                procesoEnEjecucion.setContadorCiclosOperacion(procesoEnEjecucion.getContadorCiclosOperacion() - 1);
-                if (procesoEnEjecucion.getContadorCiclosOperacion() <= 0) {
-                    procesoEnEjecucion.setFaseSincronizacion(1);
-                }
-                quantumActual++;
-                verificarQuantum();
-                break;
-
-            case 1: // Verificación de latencia de red si es buffer remoto
-                if (esRemoto && cluster != null && cluster.getLatenciaRedCiclos() > 0) {
-                    procesoEnEjecucion.setEstado(EstadoProceso.BLOQUEADO);
-                    procesoEnEjecucion.setMotivoBloqueo(MotivoBloqueo.LATENCIA_RED);
-                    procesoEnEjecucion.setCiclosLatenciaRestantes(cluster.getLatenciaRedCiclos());
-                    procesoEnEjecucion.setFaseSincronizacion(2);
-                    colaBloqueados.encolar(procesoEnEjecucion);
-                    cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " accede a " + buffer.getId() + " remotamente (bloqueado por red " + cluster.getLatenciaRedCiclos() + " ciclos)");
-                    computador.getCpu().liberarProceso();
-                    procesoEnEjecucion = null;
+            if (computador.asignarMemoria(p.getMemoriaRequerida())) {
+                p.setEstado(EstadoProceso.LISTO);
+                computador.getColaListos().encolar(p);
+                log("Proceso " + p.getNombre() + " admitido en RAM -> LISTO (" + p.getMemoriaRequerida() + " MB)");
+            } else {
+                // Intentar liberar RAM suspendiendo un proceso bloqueado (Mediano Plazo)
+                boolean espacioLiberado = intentarSuspenderParaLiberarRAM(p.getMemoriaRequerida(), cicloActual);
+                if (espacioLiberado && computador.asignarMemoria(p.getMemoriaRequerida())) {
+                    p.setEstado(EstadoProceso.LISTO);
+                    computador.getColaListos().encolar(p);
+                    log("Proceso " + p.getNombre() + " entró a RAM tras swapping -> LISTO");
                 } else {
-                    procesoEnEjecucion.setFaseSincronizacion(2);
-                    ejecutarProductor(cicloActual);
+                    // Si aún no cabe, enviarlo a Swap en estado LISTO_SUSPENDIDO
+                    DiscoSimulado disco = computador.getDisco();
+                    int bloquesSwap = Math.max(1, (int) Math.ceil(p.getMemoriaRequerida() / 16.0));
+                    int bloqueInicio = (disco != null) ? disco.asignarBloquesSwap(p.getNombre(), bloquesSwap) : 0;
+                    p.setBloqueInicioSwap(bloqueInicio);
+                    p.setEstado(EstadoProceso.LISTO_SUSPENDIDO);
+                    p.setMotivoBloqueo(MotivoBloqueo.SUSPENSION_SWAP);
+                    computador.getColaListoSuspendidos().encolar(p);
+                    totalSuspensiones++;
+                    if (disco != null) {
+                        disco.encolarSolicitud(new SolicitudIO(p, TipoOperacionIO.SUSPEND, p.getNombre(),
+                                Math.max(0, bloqueInicio), bloquesSwap, cicloActual));
+                    }
+                    log("RAM insuficiente: " + p.getNombre() + " enviado a Swap -> LISTO_SUSPENDIDO");
                 }
-                break;
-
-            case 2: // semWait(vacios) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                boolean pasoVacios = buffer.getVacios().semWait(procesoEnEjecucion);
-                if (!pasoVacios) {
-                    procesoEnEjecucion.setMotivoBloqueo(MotivoBloqueo.SEMAFORO_VACIOS);
-                    procesoEnEjecucion.setFaseSincronizacion(3); // Al despertar ya tiene el recurso 'vacios' y pasa a mutex
-                    colaBloqueados.encolar(procesoEnEjecucion);
-                    if (cluster != null) cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " bloqueado en semáforo vacíos de " + buffer.getId());
-                    computador.getCpu().liberarProceso();
-                    procesoEnEjecucion = null;
-                    return;
-                }
-                procesoEnEjecucion.setFaseSincronizacion(3);
-                quantumActual++;
-                verificarQuantum();
-                break;
-
-            case 3: // semWait(mutex) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                boolean pasoMutex = buffer.getMutex().semWait(procesoEnEjecucion);
-                if (!pasoMutex) {
-                    procesoEnEjecucion.setMotivoBloqueo(MotivoBloqueo.SEMAFORO_MUTEX);
-                    procesoEnEjecucion.setFaseSincronizacion(4); // Al despertar ya tiene mutex y pasa a anyadir
-                    colaBloqueados.encolar(procesoEnEjecucion);
-                    if (cluster != null) cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " bloqueado en semáforo mutex de " + buffer.getId());
-                    computador.getCpu().liberarProceso();
-                    procesoEnEjecucion = null;
-                    return;
-                }
-                procesoEnEjecucion.setFaseSincronizacion(4);
-                quantumActual++;
-                verificarQuantum();
-                break;
-
-            case 4: // anyadir() a buffer en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                buffer.insertar("Item_" + procesoEnEjecucion.getId() + "_" + (procesoEnEjecucion.getElementosProcesados() + 1));
-                if (cluster != null) cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " depositó elemento en " + buffer.getId() + " (" + buffer.getElementosActuales() + "/" + buffer.getCapacidad() + ")");
-                procesoEnEjecucion.setFaseSincronizacion(5);
-                quantumActual++;
-                verificarQuantum();
-                break;
-
-            case 5: // semSignal(mutex) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                Proceso despiertoMutex = buffer.getMutex().semSignal();
-                if (despiertoMutex != null) {
-                    despertarProcesoCluster(despiertoMutex);
-                    if (cluster != null) cluster.log("Semáforo mutex de " + buffer.getId() + " desbloqueó a " + despiertoMutex.getNombre());
-                }
-                procesoEnEjecucion.setFaseSincronizacion(6);
-                quantumActual++;
-                verificarQuantum();
-                break;
-
-            case 6: // semSignal(llenos) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                Proceso despiertoLlenos = buffer.getLlenos().semSignal();
-                if (despiertoLlenos != null) {
-                    despertarProcesoCluster(despiertoLlenos);
-                    if (cluster != null) cluster.log("Semáforo llenos de " + buffer.getId() + " desbloqueó a " + despiertoLlenos.getNombre());
-                }
-                procesoEnEjecucion.incrementarElementosProcesados();
-                procesoEnEjecucion.setContadorCiclosOperacion(procesoEnEjecucion.getCiclosPorOperacion());
-                procesoEnEjecucion.setFaseSincronizacion(0);
-                procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - 1);
-
-                if (procesoEnEjecucion.getElementosProcesados() >= procesoEnEjecucion.getElementosMeta() || procesoEnEjecucion.getTiempoRestante() <= 0) {
-                    finalizarProceso(procesoEnEjecucion, cicloActual, true);
-                    computador.getCpu().liberarProceso();
-                    procesoEnEjecucion = null;
-                } else {
-                    quantumActual++;
-                    verificarQuantum();
-                }
-                break;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            mutexColas.release();
         }
     }
 
-    private void ejecutarConsumidor(int cicloActual) {
-        Buffer buffer = (cluster != null) ? cluster.buscarBuffer(procesoEnEjecucion.getBufferObjetivo()) : null;
-        if (buffer == null) {
-            ejecutarCpuBound(cicloActual);
-            return;
+    /**
+     * Planificador a Mediano Plazo: selecciona un proceso en BLOQUEADO (el que lleva más tiempo bloqueado),
+     * libera su RAM y lo transfiere al área de Swap del disco.
+     */
+    private boolean intentarSuspenderParaLiberarRAM(int memoriaNecesaria, int cicloActual) {
+        Cola<Proceso> colaBloqueados = computador.getColaBloqueados();
+        DiscoSimulado disco = computador.getDisco();
+        if (colaBloqueados.estaVacia() || disco == null) {
+            return false;
         }
 
-        boolean esRemoto = !buffer.getComputadorAnfitrion().equalsIgnoreCase(computador.getNombre());
-        int fase = procesoEnEjecucion.getFaseSincronizacion();
+        ListaEnlazada<Proceso> candidatos = colaBloqueados.obtenerListaElementos();
+        Proceso victima = null;
+        int mayorTiempoBloqueado = -1;
 
-        switch (fase) {
-            case 0: // Verificación de latencia de red si es remoto
-                if (esRemoto && cluster != null && cluster.getLatenciaRedCiclos() > 0) {
-                    procesoEnEjecucion.setEstado(EstadoProceso.BLOQUEADO);
-                    procesoEnEjecucion.setMotivoBloqueo(MotivoBloqueo.LATENCIA_RED);
-                    procesoEnEjecucion.setCiclosLatenciaRestantes(cluster.getLatenciaRedCiclos());
-                    procesoEnEjecucion.setFaseSincronizacion(1);
-                    colaBloqueados.encolar(procesoEnEjecucion);
-                    cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " accede a " + buffer.getId() + " remotamente (bloqueado por red " + cluster.getLatenciaRedCiclos() + " ciclos)");
-                    computador.getCpu().liberarProceso();
-                    procesoEnEjecucion = null;
+        for (int i = 0; i < candidatos.getTamano(); i++) {
+            Proceso c = candidatos.obtener(i);
+            if (c.getTiempoBloqueado() > mayorTiempoBloqueado) {
+                mayorTiempoBloqueado = c.getTiempoBloqueado();
+                victima = c;
+            }
+        }
+
+        if (victima == null) return false;
+
+        int bloquesSwap = Math.max(1, (int) Math.ceil(victima.getMemoriaRequerida() / 16.0));
+        int bloqueInicio = disco.asignarBloquesSwap(victima.getNombre(), bloquesSwap);
+        if (bloqueInicio == -1) {
+            return false; // Área de Swap llena
+        }
+
+        colaBloqueados.eliminarElemento(victima);
+        computador.liberarMemoria(victima.getMemoriaRequerida());
+        victima.setBloqueInicioSwap(bloqueInicio);
+        victima.setEstado(EstadoProceso.BLOQUEADO_SUSPENDIDO);
+        victima.setMotivoBloqueo(MotivoBloqueo.SUSPENSION_SWAP);
+        computador.getColaBloqueadoSuspendidos().encolar(victima);
+        totalSuspensiones++;
+
+        disco.encolarSolicitud(new SolicitudIO(victima, TipoOperacionIO.SUSPEND, victima.getNombre(),
+                bloqueInicio, bloquesSwap, cicloActual));
+        log("Planificador Mediano Plazo suspendió a " + victima.getNombre() +
+            " -> BLOQUEADO_SUSPENDIDO (liberados " + victima.getMemoriaRequerida() + " MB)");
+
+        return computador.getMemoriaDisponible() >= memoriaNecesaria;
+    }
+
+    /**
+     * Revisa si hay procesos en LISTO_SUSPENDIDO que puedan volver a RAM tras liberarse memoria.
+     */
+    private void intentarReactivarSuspendidos(int cicloActual) {
+        Cola<Proceso> colaListoSusp = computador.getColaListoSuspendidos();
+        DiscoSimulado disco = computador.getDisco();
+        if (colaListoSusp.estaVacia()) return;
+
+        ListaEnlazada<Proceso> suspendidos = colaListoSusp.obtenerListaElementos();
+        for (int i = 0; i < suspendidos.getTamano(); i++) {
+            Proceso p = suspendidos.obtener(i);
+            if (computador.asignarMemoria(p.getMemoriaRequerida())) {
+                colaListoSusp.eliminarElemento(p);
+                p.setEstado(EstadoProceso.BLOQUEADO);
+                p.setMotivoBloqueo(MotivoBloqueo.REACTIVACION_SWAP);
+                computador.getColaBloqueados().encolar(p);
+                totalReactivaciones++;
+
+                int bloquesSwap = Math.max(1, (int) Math.ceil(p.getMemoriaRequerida() / 16.0));
+                int bloqueOrigen = Math.max(0, p.getBloqueInicioSwap());
+                if (disco != null) {
+                    disco.encolarSolicitud(new SolicitudIO(p, TipoOperacionIO.RESUME, p.getNombre(),
+                            bloqueOrigen, bloquesSwap, cicloActual));
                 } else {
-                    procesoEnEjecucion.setFaseSincronizacion(1);
-                    ejecutarConsumidor(cicloActual);
+                    p.setEstado(EstadoProceso.LISTO);
+                    p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
+                    colaBloqueados.eliminarElemento(p);
+                    computador.getColaListos().encolar(p);
                 }
-                break;
+                log("Planificador Mediano Plazo reactivando desde Swap a " + p.getNombre());
+            }
+        }
+    }
 
-            case 1: // semWait(llenos) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                boolean pasoLlenos = buffer.getLlenos().semWait(procesoEnEjecucion);
-                if (!pasoLlenos) {
-                    procesoEnEjecucion.setMotivoBloqueo(MotivoBloqueo.SEMAFORO_LLENOS);
-                    procesoEnEjecucion.setFaseSincronizacion(2); // Al despertar ya tiene llenos y pasa a mutex
-                    colaBloqueados.encolar(procesoEnEjecucion);
-                    if (cluster != null) cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " bloqueado en semáforo llenos de " + buffer.getId());
-                    computador.getCpu().liberarProceso();
-                    procesoEnEjecucion = null;
-                    return;
+    /**
+     * Ejecuta un ciclo de planificación sobre la CPU y las colas del computador.
+     */
+    public void ejecutarCicloPlanificacion(int cicloActual) {
+        try {
+            mutexColas.acquire();
+
+            CPU cpu = computador.getCpu();
+            Cola<Proceso> colaListos = computador.getColaListos();
+            Cola<Proceso> colaBloqueados = computador.getColaBloqueados();
+            Cola<Proceso> colaBloqSusp = computador.getColaBloqueadoSuspendidos();
+
+            // 1. Verificar desalojo por política apropiativa (ej. Prioridad Apropiativa)
+            if (!cpu.estaLibre() && politica != null && politica.esApropiativa() && !colaListos.estaVacia()) {
+                Proceso actual = cpu.getProcesoActual();
+                Proceso candidato = politica.seleccionarSiguiente(colaListos);
+                if (candidato != null && candidato.getPrioridad() < actual.getPrioridad()) {
+                    cpu.desalojarProceso();
+                    actual.setEstado(EstadoProceso.LISTO);
+                    colaListos.encolar(actual);
+                    log("Desalojo por prioridad: " + actual.getNombre() + " -> LISTO");
                 }
-                procesoEnEjecucion.setFaseSincronizacion(2);
-                quantumActual++;
-                verificarQuantum();
-                break;
+            }
 
-            case 2: // semWait(mutex) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                boolean pasoMutex = buffer.getMutex().semWait(procesoEnEjecucion);
-                if (!pasoMutex) {
-                    procesoEnEjecucion.setMotivoBloqueo(MotivoBloqueo.SEMAFORO_MUTEX);
-                    procesoEnEjecucion.setFaseSincronizacion(3); // Al despertar ya tiene mutex y pasa a extraer
-                    colaBloqueados.encolar(procesoEnEjecucion);
-                    if (cluster != null) cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " bloqueado en semáforo mutex de " + buffer.getId());
-                    computador.getCpu().liberarProceso();
-                    procesoEnEjecucion = null;
-                    return;
+            // 2. Despachar siguiente proceso si la CPU está libre
+            if (cpu.estaLibre() && !colaListos.estaVacia() && politica != null) {
+                Proceso siguiente = politica.seleccionarSiguiente(colaListos);
+                if (siguiente != null) {
+                    siguiente.setEstado(EstadoProceso.EJECUCION);
+                    siguiente.setQuantumRestante(quantum);
+                    cpu.asignarProceso(siguiente);
+                    log("CPU ejecuta proceso: " + siguiente.getNombre());
                 }
-                procesoEnEjecucion.setFaseSincronizacion(3);
-                quantumActual++;
-                verificarQuantum();
-                break;
+            }
 
-            case 3: // extraer() de buffer en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                String item = buffer.extraer();
-                if (cluster != null) cluster.log("Proceso " + procesoEnEjecucion.getNombre() + " extrajo " + item + " de " + buffer.getId());
-                procesoEnEjecucion.setFaseSincronizacion(4);
-                quantumActual++;
-                verificarQuantum();
-                break;
+            // 3. Ejecutar instrucción en CPU
+            if (!cpu.estaLibre()) {
+                Proceso enEjecucion = cpu.getProcesoActual();
 
-            case 4: // semSignal(mutex) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                Proceso despiertoMutex = buffer.getMutex().semSignal();
-                if (despiertoMutex != null) {
-                    despertarProcesoCluster(despiertoMutex);
-                    if (cluster != null) cluster.log("Semáforo mutex de " + buffer.getId() + " desbloqueó a " + despiertoMutex.getNombre());
-                }
-                procesoEnEjecucion.setFaseSincronizacion(5);
-                quantumActual++;
-                verificarQuantum();
-                break;
-
-            case 5: // semSignal(vacios) en modo Sistema Operativo
-                procesoEnEjecucion.setModo(ModoEjecucion.SISTEMA_OPERATIVO);
-                Proceso despiertoVacios = buffer.getVacios().semSignal();
-                if (despiertoVacios != null) {
-                    despertarProcesoCluster(despiertoVacios);
-                    if (cluster != null) cluster.log("Semáforo vacíos de " + buffer.getId() + " desbloqueó a " + despiertoVacios.getNombre());
-                }
-                procesoEnEjecucion.setFaseSincronizacion(6);
-                quantumActual++;
-                verificarQuantum();
-                break;
-
-            case 6: // Consumiendo en modo usuario
-                procesoEnEjecucion.setModo(ModoEjecucion.USUARIO);
-                procesoEnEjecucion.setContadorCiclosOperacion(procesoEnEjecucion.getContadorCiclosOperacion() - 1);
-                if (procesoEnEjecucion.getContadorCiclosOperacion() <= 0) {
-                    procesoEnEjecucion.incrementarElementosProcesados();
-                    procesoEnEjecucion.setContadorCiclosOperacion(procesoEnEjecucion.getCiclosPorOperacion());
-                    procesoEnEjecucion.setFaseSincronizacion(0);
-                    procesoEnEjecucion.setTiempoRestante(procesoEnEjecucion.getTiempoRestante() - 1);
-
-                    if (procesoEnEjecucion.getElementosProcesados() >= procesoEnEjecucion.getElementosMeta() || procesoEnEjecucion.getTiempoRestante() <= 0) {
-                        finalizarProceso(procesoEnEjecucion, cicloActual, true);
-                        computador.getCpu().liberarProceso();
-                        procesoEnEjecucion = null;
-                        return;
+                // Si es un proceso IO_BOUND con operación pendiente, emitir solicitud al disco en su primer ciclo
+                if (enEjecucion.getTipo() == TipoProceso.IO_BOUND
+                        && enEjecucion.getOperacionSolicitada() != null
+                        && !enEjecucion.isOperacionIOEjecutada()) {
+                    enEjecucion.setOperacionIOEjecutada(true);
+                    iniciarOperacionDisco(enEjecucion, cicloActual);
+                } else {
+                    boolean termino = enEjecucion.ejecutarInstruccion(cicloActual);
+                    if (termino) {
+                        cpu.liberarProceso();
+                        enEjecucion.setEstado(EstadoProceso.TERMINADO);
+                        enEjecucion.setTiempoFinalizacion(cicloActual);
+                        computador.liberarMemoria(enEjecucion.getMemoriaRequerida());
+                        computador.getColaTerminados().encolar(enEjecucion);
+                        log("Proceso terminado: " + enEjecucion.getNombre() + " (liberados " + enEjecucion.getMemoriaRequerida() + " MB)");
+                        intentarReactivarSuspendidos(cicloActual);
+                    } else if (politica != null && politica.usaQuantum() && enEjecucion.getQuantumRestante() <= 0) {
+                        cpu.liberarProceso();
+                        enEjecucion.setEstado(EstadoProceso.LISTO);
+                        colaListos.encolar(enEjecucion);
+                        log("Quantum agotado para " + enEjecucion.getNombre() + " -> LISTO");
                     }
                 }
-                quantumActual++;
-                verificarQuantum();
-                break;
+            }
+
+            // 4. Actualizar tiempos de espera y bloqueo en todas las colas
+            ListaEnlazada<Proceso> listos = colaListos.obtenerListaElementos();
+            for (int i = 0; i < listos.getTamano(); i++) {
+                listos.obtener(i).incrementarEsperaListo();
+            }
+
+            ListaEnlazada<Proceso> bloqueados = colaBloqueados.obtenerListaElementos();
+            for (int i = 0; i < bloqueados.getTamano(); i++) {
+                bloqueados.obtener(i).incrementarTiempoBloqueado();
+            }
+
+            ListaEnlazada<Proceso> bloqSusp = colaBloqSusp.obtenerListaElementos();
+            for (int i = 0; i < bloqSusp.getTamano(); i++) {
+                bloqSusp.obtener(i).incrementarTiempoBloqueado();
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            mutexColas.release();
         }
     }
 
-    private void verificarQuantum() {
-        if (procesoEnEjecucion != null && politica.usaQuantum() && quantumActual >= quantum) {
-            procesoEnEjecucion.setEstado(EstadoProceso.LISTO);
-            colaListos.encolar(procesoEnEjecucion);
-            computador.getCpu().liberarProceso();
-            procesoEnEjecucion = null;
+    /**
+     * Traduce la operación CRUD del proceso en una solicitud real al Sistema de Archivos y al Disco Simulado.
+     */
+    private void iniciarOperacionDisco(Proceso p, int cicloActual) {
+        CPU cpu = computador.getCpu();
+        DiscoSimulado disco = computador.getDisco();
+        SistemaArchivos fs = computador.getSistemaArchivos();
+
+        cpu.liberarProceso();
+        p.setEstado(EstadoProceso.BLOQUEADO);
+        p.setMotivoBloqueo(MotivoBloqueo.ENTRADA_SALIDA);
+        computador.getColaBloqueados().encolar(p);
+
+        TipoOperacionIO op = p.getOperacionSolicitada();
+        String ruta = p.getRutaArchivo();
+        int bloqueObjetivo = 0;
+        int tamanoBloques = Math.max(1, p.getTamanoArchivoBloques());
+
+        if (fs != null) {
+            EntradaFS existente = fs.buscarPorRuta(ruta);
+            if (op == TipoOperacionIO.CREATE) {
+                if (ruta.endsWith("/") || p.getTamanoArchivoBloques() == 0) {
+                    fs.crearDirectorio(ruta, fs.getUsuarioActivo(), PermisoArchivo.PUBLICO);
+                } else {
+                    boolean creado = fs.crearArchivo(ruta, tamanoBloques, fs.getUsuarioActivo(), PermisoArchivo.PUBLICO, p.getNombre());
+                    if (creado) {
+                        EntradaFS nuevo = fs.buscarPorRuta(ruta);
+                        if (nuevo != null) bloqueObjetivo = Math.max(0, nuevo.getPrimerBloque());
+                    }
+                }
+            } else if (op == TipoOperacionIO.READ) {
+                if (existente != null && !existente.isEsDirectorio()) {
+                    bloqueObjetivo = Math.max(0, existente.getPrimerBloque());
+                    tamanoBloques = existente.getTamanoBloques();
+                }
+            } else if (op == TipoOperacionIO.UPDATE) {
+                if (existente != null) {
+                    bloqueObjetivo = Math.max(0, existente.getPrimerBloque());
+                    if (p.getNuevoNombreArchivo() != null && !p.getNuevoNombreArchivo().isEmpty()) {
+                        fs.actualizarNombre(ruta, p.getNuevoNombreArchivo());
+                    }
+                }
+            } else if (op == TipoOperacionIO.DELETE) {
+                if (existente != null) {
+                    bloqueObjetivo = Math.max(0, existente.getPrimerBloque());
+                    tamanoBloques = Math.max(1, existente.getTamanoBloques());
+                    fs.eliminarEntrada(ruta);
+                }
+            }
+        }
+
+        if (disco != null) {
+            disco.encolarSolicitud(new SolicitudIO(p, op, ruta, bloqueObjetivo, tamanoBloques, cicloActual));
+            log("Proceso " + p.getNombre() + " bloqueado por E/S (" + op + " -> " + ruta + ")");
+        } else {
+            // Fallback si no hubiera disco conectado
+            p.setEstado(EstadoProceso.LISTO);
+            p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
+            computador.getColaBloqueados().eliminarElemento(p);
+            computador.getColaListos().encolar(p);
         }
     }
 
-    public synchronized void despertarProcesoCluster(Proceso p) {
+    /**
+     * Invocado por DiscoSimulado cuando finaliza la solicitud de E/S o reactivación de un proceso.
+     */
+    public void desbloquearProcesoLocal(Proceso p) {
         if (p == null) return;
-        p.setEstado(EstadoProceso.LISTO);
-        p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
+        try {
+            mutexColas.acquire();
+            computador.getColaBloqueados().eliminarElemento(p);
+            computador.getColaBloqueadoSuspendidos().eliminarElemento(p);
+            computador.getColaListoSuspendidos().eliminarElemento(p);
 
-        // Si es de esta misma máquina:
-        if (computador != null && p.getComputadorAsignado().equalsIgnoreCase(computador.getNombre())) {
-            desbloquearProcesoLocal(p);
-        } else if (cluster != null) {
-            // Es de otra máquina del clúster (comunicación distribuida)
-            Computador otro = cluster.buscarComputadorPorNombre(p.getComputadorAsignado());
-            if (otro != null) {
-                otro.getPlanificador().desbloquearProcesoLocal(p);
-            }
+            p.setEstado(EstadoProceso.LISTO);
+            p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
+            computador.getColaListos().encolar(p);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            mutexColas.release();
         }
     }
 
-    public synchronized void desbloquearProcesoLocal(Proceso p) {
-        // Removerlo de la cola de bloqueados de esta máquina y pasarlo a listos
-        Cola<Proceso> aux = new Cola<>();
-        while (!colaBloqueados.estaVacia()) {
-            Proceso actual = colaBloqueados.desencolar();
-            if (actual.getId() != p.getId()) {
-                aux.encolar(actual);
-            }
-        }
-        while (!aux.estaVacia()) {
-            colaBloqueados.encolar(aux.desencolar());
-        }
-
-        p.setEstado(EstadoProceso.LISTO);
-        colaListos.encolar(p);
-    }
-
-    private void procesarBloqueadosPorTiempo(int cicloActual) {
-        Cola<Proceso> aux = new Cola<>();
-        while (!colaBloqueados.estaVacia()) {
-            Proceso p = colaBloqueados.desencolar();
-
-            if (p.getMotivoBloqueo() == MotivoBloqueo.ENTRADA_SALIDA) {
-                p.setTiempoRestanteIO(p.getTiempoRestanteIO() - 1);
-                if (p.getTiempoRestanteIO() <= 0) {
-                    p.setEstado(EstadoProceso.LISTO);
-                    p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
-                    colaListos.encolar(p);
-                    if (cluster != null) cluster.log("Proceso " + p.getNombre() + " terminó su operación de E/S y pasa a Listos");
-                } else {
-                    aux.encolar(p);
-                }
-            } else if (p.getMotivoBloqueo() == MotivoBloqueo.LATENCIA_RED) {
-                p.setCiclosLatenciaRestantes(p.getCiclosLatenciaRestantes() - 1);
-                if (p.getCiclosLatenciaRestantes() <= 0) {
-                    p.setEstado(EstadoProceso.LISTO);
-                    p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
-                    colaListos.encolar(p);
-                    if (cluster != null) cluster.log("Proceso " + p.getNombre() + " completó transferencia de red y pasa a Listos");
-                } else {
-                    aux.encolar(p);
-                }
-            } else {
-                aux.encolar(p); // Permanece bloqueado en semáforo
-            }
-        }
-
-        while (!aux.estaVacia()) {
-            colaBloqueados.encolar(aux.desencolar());
-        }
-    }
-
-    private void revisarDeadlines(int cicloActual) {
-        // 1. Proceso en CPU
-        if (procesoEnEjecucion != null) {
-            procesoEnEjecucion.setDeadline(procesoEnEjecucion.getDeadline() - 1);
-            if (procesoEnEjecucion.getDeadline() <= 0) {
-                if (cluster != null) cluster.log("DEADLINE EXPIRADO: Proceso " + procesoEnEjecucion.getNombre() + " terminado forzosamente en " + computador.getNombre());
-                finalizarProceso(procesoEnEjecucion, cicloActual, false);
-                computador.getCpu().liberarProceso();
-                procesoEnEjecucion = null;
-            }
-        }
-
-        // 2. Procesos en Cola de Listos
-        Cola<Proceso> auxListos = new Cola<>();
-        while (!colaListos.estaVacia()) {
-            Proceso p = colaListos.desencolar();
-            p.setDeadline(p.getDeadline() - 1);
-            if (p.getDeadline() <= 0) {
-                if (cluster != null) cluster.log("DEADLINE EXPIRADO: Proceso " + p.getNombre() + " en cola de listos terminado forzosamente");
-                finalizarProceso(p, cicloActual, false);
-            } else {
-                auxListos.encolar(p);
-            }
-        }
-        while (!auxListos.estaVacia()) {
-            colaListos.encolar(auxListos.desencolar());
-        }
-
-        // 3. Procesos en Cola de Bloqueados
-        Cola<Proceso> auxBloq = new Cola<>();
-        while (!colaBloqueados.estaVacia()) {
-            Proceso p = colaBloqueados.desencolar();
-            p.setDeadline(p.getDeadline() - 1);
-            if (p.getDeadline() <= 0) {
-                if (cluster != null) cluster.log("DEADLINE EXPIRADO: Proceso " + p.getNombre() + " en estado bloqueado terminado forzosamente");
-                finalizarProceso(p, cicloActual, false);
-            } else {
-                auxBloq.encolar(p);
-            }
-        }
-        while (!auxBloq.estaVacia()) {
-            colaBloqueados.encolar(auxBloq.desencolar());
-        }
-    }
-
-    private void finalizarProceso(Proceso p, int cicloActual, boolean cumplioDeadline) {
-        p.setEstado(EstadoProceso.TERMINADO);
-        p.setCicloFinalizacion(cicloActual);
-        p.setCumplioDeadline(cumplioDeadline);
-        colaTerminados.encolar(p);
-        procesosTerminadosEnCiclo.agregar(p);
-    }
-
-    public synchronized ListaEnlazada<Proceso> extraerProcesosTerminadosEnCiclo() {
-        ListaEnlazada<Proceso> copia = procesosTerminadosEnCiclo;
-        procesosTerminadosEnCiclo = new ListaEnlazada<>();
-        return copia;
-    }
-
-    // --- Getters y Setters ---
-    public int getQuantum() { return quantum; }
-    public void setQuantum(int quantum) { this.quantum = quantum; }
-    public PoliticaPlanificacion getPolitica() { return politica; }
-    public Cola<Proceso> getColaListos() { return colaListos; }
-    public Cola<Proceso> getColaBloqueados() { return colaBloqueados; }
-    public Cola<Proceso> getColaTerminados() { return colaTerminados; }
-    public Proceso getProcesoEnEjecucion() { return procesoEnEjecucion; }
+    public int getTotalSuspensiones() { return totalSuspensiones; }
+    public int getTotalReactivaciones() { return totalReactivaciones; }
 }
