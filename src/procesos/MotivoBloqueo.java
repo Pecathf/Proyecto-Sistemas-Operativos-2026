@@ -10,12 +10,10 @@ package procesos;
  */
 
 public enum MotivoBloqueo {
-    NINGUNO("No bloqueado"),
-    SEMAFORO_MUTEX("Semáforo Mutex"),
-    SEMAFORO_LLENOS("Semáforo Llenos"),
-    SEMAFORO_VACIOS("Semáforo Vacíos"),
-    LATENCIA_RED("Latencia de Red"),
-    ENTRADA_SALIDA("Operación de E/S");
+    NINGUNO("Ninguno"),
+    ENTRADA_SALIDA("Operación de E/S en Disco"),
+    SUSPENSION_SWAP("Suspendido en Área de Swap"),
+    REACTIVACION_SWAP("Reactivando desde Swap a RAM");
 
     private final String descripcion;
 
