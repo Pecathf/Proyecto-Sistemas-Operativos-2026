@@ -1,4 +1,5 @@
 package procesos;
+
 /**
  *
  * @author Jabri
@@ -7,6 +8,7 @@ import archivos.EntradaFS;
 import archivos.PermisoArchivo;
 import archivos.SistemaArchivos;
 import arquitectura.CPU;
+import arquitectura.Cluster;
 import arquitectura.Computador;
 import disco.DiscoSimulado;
 import disco.SolicitudIO;
@@ -39,6 +41,18 @@ public class Planificador {
         this.totalReactivaciones = 0;
     }
 
+    public Planificador(int quantum, PoliticaPlanificacion politica) {
+        this(null, politica, quantum);
+    }
+
+    public void setComputador(Computador computador) {
+        this.computador = computador;
+    }
+
+    public void setCluster(Cluster cluster) {
+        // Compatibilidad con versiones previas
+    }
+
     public void setLogger(RegistroEventos logger) {
         this.logger = logger;
     }
@@ -68,11 +82,26 @@ public class Planificador {
         return quantum;
     }
 
+    private void eliminarDeCola(Cola<Proceso> cola, Proceso p) {
+        if (cola == null || p == null || cola.estaVacia()) return;
+        Cola<Proceso> aux = new Cola<>();
+        while (!cola.estaVacia()) {
+            Proceso actual = cola.desencolar();
+            if (actual != null && actual.getId() != p.getId()) {
+                aux.encolar(actual);
+            }
+        }
+        while (!aux.estaVacia()) {
+            cola.encolar(aux.desencolar());
+        }
+    }
+
     /**
      * Admite un proceso nuevo: si hay RAM va a LISTO; si no hay RAM, intenta suspender
      * un proceso bloqueado o lo envía directamente a LISTO_SUSPENDIDO.
      */
     public void admitirProceso(Proceso p, int cicloActual) {
+        if (computador == null) return;
         try {
             mutexColas.acquire();
             p.setTiempoLlegada(cicloActual);
@@ -100,8 +129,8 @@ public class Planificador {
                     computador.getColaListoSuspendidos().encolar(p);
                     totalSuspensiones++;
                     if (disco != null) {
-                        disco.encolarSolicitud(new SolicitudIO(p, TipoOperacionIO.SUSPEND, p.getNombre(),
-                                Math.max(0, bloqueInicio), bloquesSwap, cicloActual));
+                        disco.encolarSolicitud(new SolicitudIO(p, TipoOperacionIO.SUSPEND,
+                                Math.max(0, bloqueInicio), p.getNombre(), bloquesSwap, cicloActual));
                     }
                     log("RAM insuficiente: " + p.getNombre() + " enviado a Swap -> LISTO_SUSPENDIDO");
                 }
@@ -118,6 +147,7 @@ public class Planificador {
      * libera su RAM y lo transfiere al área de Swap del disco.
      */
     private boolean intentarSuspenderParaLiberarRAM(int memoriaNecesaria, int cicloActual) {
+        if (computador == null) return false;
         Cola<Proceso> colaBloqueados = computador.getColaBloqueados();
         DiscoSimulado disco = computador.getDisco();
         if (colaBloqueados.estaVacia() || disco == null) {
@@ -144,7 +174,7 @@ public class Planificador {
             return false; // Área de Swap llena
         }
 
-        colaBloqueados.eliminarElemento(victima);
+        eliminarDeCola(colaBloqueados, victima);
         computador.liberarMemoria(victima.getMemoriaRequerida());
         victima.setBloqueInicioSwap(bloqueInicio);
         victima.setEstado(EstadoProceso.BLOQUEADO_SUSPENDIDO);
@@ -152,8 +182,8 @@ public class Planificador {
         computador.getColaBloqueadoSuspendidos().encolar(victima);
         totalSuspensiones++;
 
-        disco.encolarSolicitud(new SolicitudIO(victima, TipoOperacionIO.SUSPEND, victima.getNombre(),
-                bloqueInicio, bloquesSwap, cicloActual));
+        disco.encolarSolicitud(new SolicitudIO(victima, TipoOperacionIO.SUSPEND,
+                bloqueInicio, victima.getNombre(), bloquesSwap, cicloActual));
         log("Planificador Mediano Plazo suspendió a " + victima.getNombre() +
             " -> BLOQUEADO_SUSPENDIDO (liberados " + victima.getMemoriaRequerida() + " MB)");
 
@@ -164,6 +194,7 @@ public class Planificador {
      * Revisa si hay procesos en LISTO_SUSPENDIDO que puedan volver a RAM tras liberarse memoria.
      */
     private void intentarReactivarSuspendidos(int cicloActual) {
+        if (computador == null) return;
         Cola<Proceso> colaListoSusp = computador.getColaListoSuspendidos();
         DiscoSimulado disco = computador.getDisco();
         if (colaListoSusp.estaVacia()) return;
@@ -172,7 +203,7 @@ public class Planificador {
         for (int i = 0; i < suspendidos.getTamano(); i++) {
             Proceso p = suspendidos.obtener(i);
             if (computador.asignarMemoria(p.getMemoriaRequerida())) {
-                colaListoSusp.eliminarElemento(p);
+                eliminarDeCola(colaListoSusp, p);
                 p.setEstado(EstadoProceso.BLOQUEADO);
                 p.setMotivoBloqueo(MotivoBloqueo.REACTIVACION_SWAP);
                 computador.getColaBloqueados().encolar(p);
@@ -181,12 +212,12 @@ public class Planificador {
                 int bloquesSwap = Math.max(1, (int) Math.ceil(p.getMemoriaRequerida() / 16.0));
                 int bloqueOrigen = Math.max(0, p.getBloqueInicioSwap());
                 if (disco != null) {
-                    disco.encolarSolicitud(new SolicitudIO(p, TipoOperacionIO.RESUME, p.getNombre(),
-                            bloqueOrigen, bloquesSwap, cicloActual));
+                    disco.encolarSolicitud(new SolicitudIO(p, TipoOperacionIO.RESUME,
+                            bloqueOrigen, p.getNombre(), bloquesSwap, cicloActual));
                 } else {
                     p.setEstado(EstadoProceso.LISTO);
                     p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
-                    colaBloqueados.eliminarElemento(p);
+                    eliminarDeCola(computador.getColaBloqueados(), p);
                     computador.getColaListos().encolar(p);
                 }
                 log("Planificador Mediano Plazo reactivando desde Swap a " + p.getNombre());
@@ -198,6 +229,7 @@ public class Planificador {
      * Ejecuta un ciclo de planificación sobre la CPU y las colas del computador.
      */
     public void ejecutarCicloPlanificacion(int cicloActual) {
+        if (computador == null) return;
         try {
             mutexColas.acquire();
 
@@ -206,31 +238,28 @@ public class Planificador {
             Cola<Proceso> colaBloqueados = computador.getColaBloqueados();
             Cola<Proceso> colaBloqSusp = computador.getColaBloqueadoSuspendidos();
 
-            // 1. Verificar desalojo por política apropiativa (ej. Prioridad Apropiativa)
-            if (!cpu.estaLibre() && politica != null && politica.esApropiativa() && !colaListos.estaVacia()) {
+            // 1. Verificar desalojo por política apropiativa
+            if (cpu.getProcesoActual() != null && politica != null && politica.debeApropiar(cpu.getProcesoActual(), colaListos)) {
                 Proceso actual = cpu.getProcesoActual();
-                Proceso candidato = politica.seleccionarSiguiente(colaListos);
-                if (candidato != null && candidato.getPrioridad() < actual.getPrioridad()) {
-                    cpu.desalojarProceso();
-                    actual.setEstado(EstadoProceso.LISTO);
-                    colaListos.encolar(actual);
-                    log("Desalojo por prioridad: " + actual.getNombre() + " -> LISTO");
-                }
+                cpu.liberarProceso();
+                actual.setEstado(EstadoProceso.LISTO);
+                colaListos.encolar(actual);
+                log("Desalojo por prioridad/política apropiativa: " + actual.getNombre() + " -> LISTO");
             }
 
             // 2. Despachar siguiente proceso si la CPU está libre
-            if (cpu.estaLibre() && !colaListos.estaVacia() && politica != null) {
-                Proceso siguiente = politica.seleccionarSiguiente(colaListos);
+            if (cpu.getProcesoActual() == null && !colaListos.estaVacia() && politica != null) {
+                Proceso siguiente = politica.seleccionarSiguienteProceso(colaListos);
                 if (siguiente != null) {
                     siguiente.setEstado(EstadoProceso.EJECUCION);
                     siguiente.setQuantumRestante(quantum);
-                    cpu.asignarProceso(siguiente);
+                    cpu.cargarProceso(siguiente);
                     log("CPU ejecuta proceso: " + siguiente.getNombre());
                 }
             }
 
             // 3. Ejecutar instrucción en CPU
-            if (!cpu.estaLibre()) {
+            if (cpu.getProcesoActual() != null) {
                 Proceso enEjecucion = cpu.getProcesoActual();
 
                 // Si es un proceso IO_BOUND con operación pendiente, emitir solicitud al disco en su primer ciclo
@@ -285,6 +314,7 @@ public class Planificador {
      * Traduce la operación CRUD del proceso en una solicitud real al Sistema de Archivos y al Disco Simulado.
      */
     private void iniciarOperacionDisco(Proceso p, int cicloActual) {
+        if (computador == null) return;
         CPU cpu = computador.getCpu();
         DiscoSimulado disco = computador.getDisco();
         SistemaArchivos fs = computador.getSistemaArchivos();
@@ -333,13 +363,13 @@ public class Planificador {
         }
 
         if (disco != null) {
-            disco.encolarSolicitud(new SolicitudIO(p, op, ruta, bloqueObjetivo, tamanoBloques, cicloActual));
+            disco.encolarSolicitud(new SolicitudIO(p, op, bloqueObjetivo, ruta, tamanoBloques, cicloActual));
             log("Proceso " + p.getNombre() + " bloqueado por E/S (" + op + " -> " + ruta + ")");
         } else {
             // Fallback si no hubiera disco conectado
             p.setEstado(EstadoProceso.LISTO);
             p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
-            computador.getColaBloqueados().eliminarElemento(p);
+            eliminarDeCola(computador.getColaBloqueados(), p);
             computador.getColaListos().encolar(p);
         }
     }
@@ -348,12 +378,12 @@ public class Planificador {
      * Invocado por DiscoSimulado cuando finaliza la solicitud de E/S o reactivación de un proceso.
      */
     public void desbloquearProcesoLocal(Proceso p) {
-        if (p == null) return;
+        if (p == null || computador == null) return;
         try {
             mutexColas.acquire();
-            computador.getColaBloqueados().eliminarElemento(p);
-            computador.getColaBloqueadoSuspendidos().eliminarElemento(p);
-            computador.getColaListoSuspendidos().eliminarElemento(p);
+            eliminarDeCola(computador.getColaBloqueados(), p);
+            eliminarDeCola(computador.getColaBloqueadoSuspendidos(), p);
+            eliminarDeCola(computador.getColaListoSuspendidos(), p);
 
             p.setEstado(EstadoProceso.LISTO);
             p.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
@@ -363,6 +393,35 @@ public class Planificador {
         } finally {
             mutexColas.release();
         }
+    }
+
+    // --- Métodos de compatibilidad con GUI y simulación ---
+    public Cola<Proceso> getColaListos() {
+        return computador != null ? computador.getColaListos() : new Cola<>();
+    }
+
+    public Cola<Proceso> getColaBloqueados() {
+        return computador != null ? computador.getColaBloqueados() : new Cola<>();
+    }
+
+    public Cola<Proceso> getColaTerminados() {
+        return computador != null ? computador.getColaTerminados() : new Cola<>();
+    }
+
+    public Proceso getProcesoEnEjecucion() {
+        return (computador != null && computador.getCpu() != null) ? computador.getCpu().getProcesoActual() : null;
+    }
+
+    public void admitirProcesoListo(Proceso p) {
+        admitirProceso(p, 0);
+    }
+
+    public void ejecutarCiclo(int cicloActual) {
+        ejecutarCicloPlanificacion(cicloActual);
+    }
+
+    public ListaEnlazada<Proceso> extraerProcesosTerminadosEnCiclo() {
+        return new ListaEnlazada<>();
     }
 
     public int getTotalSuspensiones() { return totalSuspensiones; }

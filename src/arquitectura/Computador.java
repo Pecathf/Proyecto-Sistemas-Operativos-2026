@@ -1,146 +1,145 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package arquitectura;
 
 /**
  *
  * @author Jabri
  */
-
-
+import archivos.SistemaArchivos;
+import disco.DiscoSimulado;
 import edd.Cola;
-import edd.ListaEnlazada;
 import politicas.PoliticaPlanificacion;
 import procesos.Planificador;
 import procesos.Proceso;
+import utilidades.RegistroEventos;
 
-public class Computador extends Thread implements ComponenteReloj {
+public class Computador implements ComponenteReloj {
+
+    private int id;
     private String nombre;
-    private int ramTotal;
-    private int ramUsada;
-    private int ramOcupadaBuffers;
+    private int memoriaTotal;
+    private int memoriaUsada;
 
     private CPU cpu;
     private Planificador planificador;
-    private Cola<Proceso> colaNuevos;
-    private RelojGlobal reloj;
+    private DiscoSimulado disco;
+    private SistemaArchivos sistemaArchivos;
     private Cluster cluster;
-    private boolean activo;
+    private RelojGlobal reloj;
 
-    public Computador(String nombre, int ramTotal, int quantum, PoliticaPlanificacion politicaInicial) {
+    // Colas del modelo de 7 estados
+    private Cola<Proceso> colaNuevos;
+    private Cola<Proceso> colaListos;
+    private Cola<Proceso> colaBloqueados;
+    private Cola<Proceso> colaListoSuspendidos;
+    private Cola<Proceso> colaBloqueadoSuspendidos;
+    private Cola<Proceso> colaTerminados;
+
+    public Computador(int id, String nombre, int memoriaTotal, PoliticaPlanificacion politicaInicial, int quantum) {
+        this.id = id;
         this.nombre = nombre;
-        this.ramTotal = ramTotal;
-        this.ramUsada = 0;
-        this.ramOcupadaBuffers = 0;
+        this.memoriaTotal = Math.max(64, memoriaTotal);
+        this.memoriaUsada = 0;
 
         this.cpu = new CPU();
-        this.planificador = new Planificador(quantum, politicaInicial);
-        this.planificador.setComputador(this);
         this.colaNuevos = new Cola<>();
-        this.activo = true;
+        this.colaListos = new Cola<>();
+        this.colaBloqueados = new Cola<>();
+        this.colaListoSuspendidos = new Cola<>();
+        this.colaBloqueadoSuspendidos = new Cola<>();
+        this.colaTerminados = new Cola<>();
+
+        this.planificador = new Planificador(this, politicaInicial, quantum);
+    }
+
+    public Computador(String nombre, int ramTotal, int quantum, PoliticaPlanificacion politicaInicial) {
+        this(1, nombre, ramTotal, politicaInicial, quantum);
+    }
+
+    public void vincularAlmacenamiento(DiscoSimulado disco, SistemaArchivos sistemaArchivos, RegistroEventos logger) {
+        this.disco = disco;
+        this.sistemaArchivos = sistemaArchivos;
+        if (this.disco != null) {
+            this.disco.setComputador(this);
+            this.disco.setLogger(logger);
+        }
+        if (this.sistemaArchivos != null) {
+            this.sistemaArchivos.setLogger(logger);
+        }
+        if (this.planificador != null) {
+            this.planificador.setLogger(logger);
+        }
+    }
+
+    @Override
+    public void ejecutarCiclo(int cicloActual) {
+        if (planificador != null) {
+            planificador.ejecutarCicloPlanificacion(cicloActual);
+        }
+        if (cpu != null) {
+            cpu.ejecutarCiclo(cicloActual);
+        }
+    }
+
+    public synchronized boolean asignarMemoria(int cantidadMB) {
+        if (memoriaUsada + cantidadMB <= memoriaTotal) {
+            memoriaUsada += cantidadMB;
+            return true;
+        }
+        return false;
+    }
+
+    public synchronized void liberarMemoria(int cantidadMB) {
+        memoriaUsada = Math.max(0, memoriaUsada - cantidadMB);
+    }
+
+    public int getMemoriaDisponible() {
+        return memoriaTotal - memoriaUsada;
+    }
+
+    // --- Métodos de compatibilidad ---
+    public int getRamTotal() { return getMemoriaTotal(); }
+    public int getRamUsada() { return getMemoriaUsada(); }
+    public int getRamLibre() { return getMemoriaDisponible(); }
+
+    public synchronized void ocuparMemoriaBuffer(int cantidadMb) {
+        this.memoriaUsada = Math.min(memoriaTotal, memoriaUsada + cantidadMb);
+    }
+
+    public void setCluster(Cluster cluster) {
+        this.cluster = cluster;
+        if (this.planificador != null) {
+            this.planificador.setCluster(cluster);
+        }
     }
 
     public void setReloj(RelojGlobal reloj) {
         this.reloj = reloj;
     }
 
-    public void setCluster(Cluster cluster) {
-        this.cluster = cluster;
-        this.planificador.setCluster(cluster);
-    }
-
     public synchronized void recibirProceso(Proceso p, int cicloActual) {
-        p.setCicloLlegada(cicloActual);
-        p.setComputadorAsignado(this.nombre);
-        colaNuevos.encolar(p);
-    }
-
-    public synchronized void admitirProcesosSiHayMemoria() {
-        Cola<Proceso> aux = new Cola<>();
-        while (!colaNuevos.estaVacia()) {
-            Proceso p = colaNuevos.desencolar();
-            if (ramUsada + p.getMemoriaRequerida() <= ramTotal) {
-                ramUsada += p.getMemoriaRequerida();
-                planificador.admitirProcesoListo(p);
-                if (cluster != null) {
-                    cluster.log("Memoria suficiente en " + nombre + ". Proceso " + p.getNombre() + " admitido a Listo (RAM usada: " + ramUsada + "/" + ramTotal + " MB)");
-                }
-            } else {
-                aux.encolar(p);
-            }
-        }
-        while (!aux.estaVacia()) {
-            colaNuevos.encolar(aux.desencolar());
+        if (p != null && planificador != null) {
+            planificador.admitirProceso(p, cicloActual);
         }
     }
 
-    public synchronized void ocuparMemoriaBuffer(int cantidadMb) {
-        this.ramOcupadaBuffers += cantidadMb;
-        this.ramUsada += cantidadMb;
+    public void admitirProcesosSiHayMemoria() {
+        // Compatibilidad con invocaciones antiguas
     }
 
-    public synchronized void liberarMemoria(int cantidad) {
-        this.ramUsada -= cantidad;
-        if (this.ramUsada < ramOcupadaBuffers) {
-            this.ramUsada = ramOcupadaBuffers;
-        }
-    }
-
-    @Override
-    public void ejecutarCiclo(int cicloActual) {
-        planificador.ejecutarCiclo(cicloActual);
-    }
-
-    @Override
-    public void run() {
-        while (activo) {
-            try {
-                // 1. Esperar la señal del Reloj Global
-                reloj.esperarInicioCiclo();
-                
-                int cicloActual = reloj.getCicloActual();
-                
-                try {
-                    // 2. Intentar admitir procesos de la cola de nuevos a la cola de listos si hay RAM
-                    admitirProcesosSiHayMemoria();
-
-                    // 3. Ejecutar el ciclo en los componentes (CPU y Planificador)
-                    ejecutarCiclo(cicloActual);
-                    
-                    // 4. Liberar memoria de todos los procesos terminados en este ciclo
-                    ListaEnlazada<Proceso> terminados = planificador.extraerProcesosTerminadosEnCiclo();
-                    for (int i = 0; i < terminados.getTamano(); i++) {
-                        liberarMemoria(terminados.obtener(i).getMemoriaRequerida());
-                    }
-
-                    // 5. Tras liberar memoria, revisar de inmediato si se puede admitir otro proceso
-                    if (!terminados.estaVacia()) {
-                        admitirProcesosSiHayMemoria();
-                    }
-                } catch (Throwable ex) {
-                    System.err.println("Error en ciclo de " + nombre + ": " + ex.getMessage());
-                    ex.printStackTrace();
-                } finally {
-                    // 6. Avisar al Reloj SIEMPRE para evitar interbloqueo del clúster
-                    reloj.notificarFinCiclo();
-                }
-                
-            } catch (InterruptedException e) {
-                System.out.println(nombre + " fue interrumpido.");
-            }
-        }
-    }
-
-    public void apagar() { this.activo = false; }
-
+    // --- Getters ---
+    public int getId() { return id; }
     public String getNombre() { return nombre; }
+    public int getMemoriaTotal() { return memoriaTotal; }
+    public int getMemoriaUsada() { return memoriaUsada; }
     public CPU getCpu() { return cpu; }
     public Planificador getPlanificador() { return planificador; }
+    public DiscoSimulado getDisco() { return disco; }
+    public SistemaArchivos getSistemaArchivos() { return sistemaArchivos; }
+
     public Cola<Proceso> getColaNuevos() { return colaNuevos; }
-    public int getRamLibre() { return ramTotal - ramUsada; }
-    public int getRamUsada() { return ramUsada; }
-    public int getRamTotal() { return ramTotal; }
-    public int getRamOcupadaBuffers() { return ramOcupadaBuffers; }
+    public Cola<Proceso> getColaListos() { return colaListos; }
+    public Cola<Proceso> getColaBloqueados() { return colaBloqueados; }
+    public Cola<Proceso> getColaListoSuspendidos() { return colaListoSuspendidos; }
+    public Cola<Proceso> getColaBloqueadoSuspendidos() { return colaBloqueadoSuspendidos; }
+    public Cola<Proceso> getColaTerminados() { return colaTerminados; }
 }
