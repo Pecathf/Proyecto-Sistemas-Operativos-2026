@@ -8,6 +8,20 @@ package utilidades;
  *
  * @author samue
  */
-public interface RegistroEventos {
-    void registrar(String mensaje);
+public class RegistroEventos {
+    private final StringBuilder historial = new StringBuilder();
+
+    public synchronized void registrar(String evento) {
+        historial.append("• ").append(evento).append("\n");
+        System.out.println(evento);
+    }
+
+    public synchronized String obtenerHistorialCompleto() {
+        return historial.toString();
+    }
+
+    @Override
+    public String toString() {
+        return obtenerHistorialCompleto();
+    }
 }

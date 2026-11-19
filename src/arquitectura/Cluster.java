@@ -33,7 +33,7 @@ public class Cluster {
         this.computadores = new ListaEnlazada<>();
         this.buffers = new ListaEnlazada<>();
         this.latenciaRedCiclos = 2;
-        this.logger = mensaje -> {};
+        this.logger = null;
         this.generadorID = new GeneradorID();
         this.historialProcesos = new ListaEnlazada<>();
         this.reloj = new RelojGlobal(1000);
@@ -56,7 +56,7 @@ public class Cluster {
         }
         this.disco = disco;
         this.sistemaArchivos = sistemaArchivos;
-        this.logger = (logger != null) ? logger : mensaje -> {};
+        this.logger = logger;
         this.generadorID = new GeneradorID();
         this.historialProcesos = new ListaEnlazada<>();
 
@@ -74,7 +74,7 @@ public class Cluster {
     }
 
     public void setLogger(RegistroEventos logger) {
-        this.logger = (logger != null) ? logger : mensaje -> {};
+        this.logger = logger;
     }
 
     public void log(String mensaje) {

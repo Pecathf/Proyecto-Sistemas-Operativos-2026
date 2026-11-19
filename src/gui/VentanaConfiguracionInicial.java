@@ -162,7 +162,6 @@ public class VentanaConfiguracionInicial extends JFrame {
                 lblArchivoProcesos.setText(f.getName() + " (" + datosProcesosCargados.procesos.getTamano() + " proc)");
                 lblArchivoProcesos.setForeground(new Color(105, 240, 174));
 
-                // Pre-cargar valores leídos desde el JSON en los controles
                 spnDuracionCiclo.setValue(datosProcesosCargados.cycleDurationMs);
                 spnMemoriaRAM.setValue(datosProcesosCargados.ramCapacity);
                 spnSwapBloques.setValue(datosProcesosCargados.swapSizeBlocks);

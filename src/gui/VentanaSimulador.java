@@ -647,7 +647,7 @@ public class VentanaSimulador extends JFrame {
                 int y = pad + r * cellH;
 
                 if (b.isOcupado()) {
-                    g.setColor(b.getColorArchivo() != null ? b.getColorArchivo() : Color.CYAN);
+                    g.setColor(b.getColor() != null ? b.getColor() : Color.CYAN);
                 } else if (b.isEsAreaSwap()) {
                     g.setColor(new Color(55, 38, 72)); // Área Swap libre
                 } else {

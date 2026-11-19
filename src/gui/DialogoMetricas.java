@@ -54,7 +54,16 @@ public class DialogoMetricas extends JDialog {
         root.setBorder(new EmptyBorder(18, 22, 18, 22));
 
         agregarFila(root, "Ciclos Totales Simulados:", String.valueOf(sistema.getReloj().getCicloActual()));
-        agregarFila(root, "Utilización de CPU:", String.format("%.2f %%", comp.getCpu().getPorcentajeUtilizacion()));
+        
+        // --- CÁLCULO DIRECTO DE UTILIZACIÓN DE CPU (Solución al error) ---
+        long ciclosCPU = 0;
+        for (int i = 0; i < historial.getTamano(); i++) {
+            ciclosCPU += historial.obtener(i).getTiempoEjecucionCPU();
+        }
+        double utilizacionCPU = Math.min(100.0, (ciclosCPU * 100.0) / ciclosTotales);
+        agregarFila(root, "Utilización de CPU:", String.format("%.2f %%", utilizacionCPU));
+        // -----------------------------------------------------------------
+
         agregarFila(root, "Procesos Terminados / Totales:", terminados + " / " + historial.getTamano());
         agregarFila(root, "Throughput (Proc / Ciclo):", String.format("%.4f", throughput));
         agregarFila(root, "Tiempo Promedio Espera CPU:", String.format("%.2f ciclos", promEsperaCPU));
