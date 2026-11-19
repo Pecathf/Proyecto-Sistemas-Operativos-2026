@@ -7,14 +7,18 @@ package main;
 
 import gui.VentanaConfiguracionInicial;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 
 public class Main {
-
     public static void main(String[] args) {
-        // Lanzar la vista de configuración inicial obligatoria del sistema distribuido
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception ignored) {
+        }
+
         SwingUtilities.invokeLater(() -> {
-            VentanaConfiguracionInicial ventanaConfig = new VentanaConfiguracionInicial();
-            ventanaConfig.setVisible(true);
+            VentanaConfiguracionInicial ventana = new VentanaConfiguracionInicial();
+            ventana.setVisible(true);
         });
     }
 }

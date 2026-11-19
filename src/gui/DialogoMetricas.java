@@ -1,128 +1,89 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package gui;
 
 /**
  *
  * @author Jabri
  */
+
 import arquitectura.Cluster;
 import arquitectura.Computador;
+import disco.DiscoSimulado;
 import edd.ListaEnlazada;
+import procesos.Planificador;
 import procesos.Proceso;
-import sincronizacion.Buffer;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.TitledBorder;
 import java.awt.*;
 
 public class DialogoMetricas extends JDialog {
 
-    private Cluster cluster;
-    private int cicloActual;
+    public DialogoMetricas(Frame owner, Cluster sistema) {
+        super(owner, "Métricas Globales de Rendimiento (CPU, Memoria, Disco y Swap)", true);
+        setSize(580, 520);
+        setLocationRelativeTo(owner);
 
-    public DialogoMetricas(JFrame parent, Cluster cluster, int cicloActual) {
-        super(parent, "Métricas de Rendimiento - ÁvilaOS", false);
-        this.cluster = cluster;
-        this.cicloActual = cicloActual;
+        Computador comp = sistema.getComputadorUnico();
+        DiscoSimulado disco = sistema.getDisco();
+        Planificador plan = comp.getPlanificador();
 
-        setSize(750, 600);
-        setLocationRelativeTo(parent);
-        setLayout(new BorderLayout(10, 10));
-        getContentPane().setBackground(new Color(24, 28, 38));
+        ListaEnlazada<Proceso> historial = sistema.getHistorialProcesos();
+        int terminados = 0;
+        int cumplidos = 0;
+        long sumaEspera = 0;
+        long sumaRetorno = 0;
 
-        JPanel contenedor = new JPanel();
-        contenedor.setLayout(new BoxLayout(contenedor, BoxLayout.Y_AXIS));
-        contenedor.setBackground(new Color(24, 28, 38));
-        contenedor.setBorder(new EmptyBorder(10, 10, 10, 10));
-
-        // 1. Métricas Globales
-        JPanel panelGlobal = new JPanel(new GridLayout(0, 2, 8, 8));
-        panelGlobal.setBackground(new Color(34, 40, 52));
-        panelGlobal.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(55, 65, 85)), "Métricas Globales del Sistema Distribuido",
-                TitledBorder.LEFT, TitledBorder.TOP, new Font("SansSerif", Font.BOLD, 12), new Color(0, 200, 115)));
-
-        agregarDato(panelGlobal, "Ciclos Transcurridos:", String.valueOf(cicloActual));
-        agregarDato(panelGlobal, "Throughput Global:", String.format("%.2f proc / 100 ciclos", cluster.getThroughputGlobal(cicloActual)));
-        agregarDato(panelGlobal, "Utilización Promedio CPU:", String.format("%.1f %%", cluster.getUsoCPUGlobal()));
-        agregarDato(panelGlobal, "Tiempo de Respuesta Promedio:", String.format("%.2f ciclos", cluster.getTiempoRespuestaPromedioGlobal()));
-        agregarDato(panelGlobal, "Tasa de Cumplimiento de Deadlines:", String.format("%.1f %%", cluster.getTasaCumplimientoDeadlinesGlobal()));
-        agregarDato(panelGlobal, "Índice de Equidad (Jain's Fairness):", String.format("%.3f / 1.000", cluster.getIndiceEquidadGlobal()));
-        agregarDato(panelGlobal, "Tiempo Promedio Bloqueado en Semáforos:", String.format("%.2f ciclos", cluster.getTiempoPromedioBloqueadoSem()));
-        contenedor.add(panelGlobal);
-        contenedor.add(Box.createRigidArea(new Dimension(0, 10)));
-
-        // 2. Métricas por Computador
-        JPanel panelComputadores = new JPanel(new GridLayout(0, 2, 8, 8));
-        panelComputadores.setBackground(new Color(34, 40, 52));
-        panelComputadores.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(55, 65, 85)), "Métricas por Computador",
-                TitledBorder.LEFT, TitledBorder.TOP, new Font("SansSerif", Font.BOLD, 12), new Color(41, 121, 255)));
-
-        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
-            Computador c = cluster.getComputador(i);
-            int compTerminados = c.getPlanificador().getColaTerminados().getTamano();
-            double uso = c.getCpu().getPorcentajeUso();
-
-            agregarDato(panelComputadores, c.getNombre() + " - Política:", c.getPlanificador().getPolitica().getTipo().name());
-            agregarDato(panelComputadores, c.getNombre() + " - Utilización CPU:", String.format("%.1f %%", uso));
-            agregarDato(panelComputadores, c.getNombre() + " - Procesos Terminados:", String.valueOf(compTerminados));
-            agregarDato(panelComputadores, c.getNombre() + " - RAM Usada:", c.getRamUsada() + " / " + c.getRamTotal() + " MB");
-        }
-        contenedor.add(panelComputadores);
-        contenedor.add(Box.createRigidArea(new Dimension(0, 10)));
-
-        // 3. Métricas Productor-Consumidor por Buffer
-        JPanel panelBuffers = new JPanel(new GridLayout(0, 2, 8, 8));
-        panelBuffers.setBackground(new Color(34, 40, 52));
-        panelBuffers.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(55, 65, 85)), "Métricas de Buffers (Sincronización)",
-                TitledBorder.LEFT, TitledBorder.TOP, new Font("SansSerif", Font.BOLD, 12), new Color(255, 145, 0)));
-
-        ListaEnlazada<Buffer> bufs = cluster.getBuffers();
-        if (bufs.estaVacia()) {
-            agregarDato(panelBuffers, "Buffers:", "No hay buffers creados en la simulación");
-            agregarDato(panelBuffers, "", "");
-        } else {
-            for (int i = 0; i < bufs.getTamano(); i++) {
-                Buffer b = bufs.obtener(i);
-                agregarDato(panelBuffers, b.getId() + " (Anfitrión: " + b.getComputadorAnfitrion() + "):", "Capacidad: " + b.getCapacidad() + " | Ocupación: " + b.getElementosActuales());
-                agregarDato(panelBuffers, "  -> Producidos / Consumidos:", b.getTotalProducidos() + " prod / " + b.getTotalConsumidos() + " cons");
+        for (int i = 0; i < historial.getTamano(); i++) {
+            Proceso p = historial.obtener(i);
+            if (p.haTerminado()) {
+                terminados++;
+                if (p.cumplioDeadline()) cumplidos++;
+                sumaEspera += p.getTiempoEsperaListo();
+                sumaRetorno += Math.max(1, p.getTiempoFinalizacion() - p.getTiempoLlegada());
             }
         }
-        contenedor.add(panelBuffers);
 
-        JScrollPane scroll = new JScrollPane(contenedor);
-        scroll.setBorder(null);
-        add(scroll, BorderLayout.CENTER);
+        double promEsperaCPU = (terminados == 0) ? 0.0 : ((double) sumaEspera / terminados);
+        double promRetorno = (terminados == 0) ? 0.0 : ((double) sumaRetorno / terminados);
+        double tasaCumplimiento = (terminados == 0) ? 100.0 : ((cumplidos * 100.0) / terminados);
+        int ciclosTotales = Math.max(1, sistema.getReloj().getCicloActual());
+        double throughput = (double) terminados / ciclosTotales;
 
-        JButton btnCerrar = new JButton("Cerrar");
-        btnCerrar.setBackground(new Color(41, 121, 255));
-        btnCerrar.setForeground(Color.WHITE);
-        btnCerrar.setFont(new Font("SansSerif", Font.BOLD, 12));
-        btnCerrar.setFocusPainted(false);
-        btnCerrar.addActionListener(e -> dispose());
+        JPanel root = new JPanel(new GridLayout(13, 2, 10, 7));
+        root.setBackground(new Color(24, 28, 38));
+        root.setBorder(new EmptyBorder(18, 22, 18, 22));
 
-        JPanel panelBoton = new JPanel();
-        panelBoton.setBackground(new Color(24, 28, 38));
-        panelBoton.add(btnCerrar);
-        add(panelBoton, BorderLayout.SOUTH);
+        agregarFila(root, "Ciclos Totales Simulados:", String.valueOf(sistema.getReloj().getCicloActual()));
+        agregarFila(root, "Utilización de CPU:", String.format("%.2f %%", comp.getCpu().getPorcentajeUtilizacion()));
+        agregarFila(root, "Procesos Terminados / Totales:", terminados + " / " + historial.getTamano());
+        agregarFila(root, "Throughput (Proc / Ciclo):", String.format("%.4f", throughput));
+        agregarFila(root, "Tiempo Promedio Espera CPU:", String.format("%.2f ciclos", promEsperaCPU));
+        agregarFila(root, "Tiempo Promedio Retorno:", String.format("%.2f ciclos", promRetorno));
+        agregarFila(root, "Cumplimiento de Deadlines:", String.format("%.1f %%", tasaCumplimiento));
+        agregarFila(root, "Desplazamiento Total Cabezal Disco:", disco.getDesplazamientoTotal() + " bloques");
+        agregarFila(root, "Tiempo Promedio Espera Cola E/S:", String.format("%.2f ciclos", disco.getTiempoPromedioEsperaIO()));
+        agregarFila(root, "Solicitudes Atendidas por Política:",
+                "FIFO=" + disco.getAtendidasFIFO() + " | SSTF=" + disco.getAtendidasSSTF() +
+                " | SCAN=" + disco.getAtendidasSCAN() + " | C-SCAN=" + disco.getAtendidasCSCAN());
+        agregarFila(root, "Suspensiones a Swap (Out):", String.valueOf(plan.getTotalSuspensiones()));
+        agregarFila(root, "Reactivaciones desde Swap (In):", String.valueOf(plan.getTotalReactivaciones()));
+        agregarFila(root, "Uso Actual RAM / Swap:",
+                comp.getMemoriaUsada() + "/" + comp.getMemoriaTotal() + " MB | Swap libres: " +
+                disco.contarBloquesLibresSwap() + "/" + disco.getTamanoSwapBloques());
+
+        setContentPane(root);
     }
 
-    private void agregarDato(JPanel p, String etiqueta, String valor) {
-        JLabel lblE = new JLabel(etiqueta);
-        lblE.setForeground(new Color(170, 180, 200));
-        lblE.setFont(new Font("SansSerif", Font.BOLD, 11));
+    private void agregarFila(JPanel panel, String clave, String valor) {
+        JLabel l1 = new JLabel(clave);
+        l1.setForeground(new Color(165, 180, 200));
+        l1.setFont(new Font("Segoe UI", Font.BOLD, 12));
 
-        JLabel lblV = new JLabel(valor);
-        lblV.setForeground(new Color(230, 235, 245));
-        lblV.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        JLabel l2 = new JLabel(valor);
+        l2.setForeground(new Color(0, 229, 255));
+        l2.setFont(new Font("Segoe UI", Font.PLAIN, 12));
 
-        p.add(lblE);
-        p.add(lblV);
+        panel.add(l1);
+        panel.add(l2);
     }
 }

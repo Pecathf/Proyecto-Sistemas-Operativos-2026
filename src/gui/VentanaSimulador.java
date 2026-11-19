@@ -1,732 +1,670 @@
 package gui;
+
 /**
  *
  * @author Jabri
  */
+
+import archivos.EntradaFS;
+import archivos.ModoUsuario;
+import archivos.PermisoArchivo;
+import archivos.SistemaArchivos;
 import arquitectura.Cluster;
 import arquitectura.Computador;
-import arquitectura.GeneradorID;
-import arquitectura.RelojGlobal;
+import disco.*;
 import edd.ListaEnlazada;
-import politicas.*;
-import procesos.*;
-import sincronizacion.Buffer;
+import politicas.TipoPolitica;
+import procesos.Proceso;
+import utilidades.GestorJSON;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.TitledBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.io.File;
 
 public class VentanaSimulador extends JFrame {
 
-    private Cluster cluster;
-    private RelojGlobal reloj;
+    private Cluster sistema;
 
-    // Componentes de Control Global
-    private JLabel lblReloj;
-    private JButton btnPausar;
-    private JSpinner spinVelocidadMs;
-    private JSpinner spinQuantumRR;
-    private JTextArea txtLogs;
-    private JProgressBar barUsoCPUGlobal;
-    private JProgressBar barUsoRAMGlobal;
-    private PanelGraficoCPU panelGrafico;
+    // Barra superior
+    private JLabel lblCiclo;
+    private JButton btnIniciarPausar;
+    private JButton btnPasoAPaso;
+    private JComboBox<ModoUsuario> cmbModoUsuario;
+    private JComboBox<TipoPolitica> cmbPoliticaCPU;
+    private JComboBox<TipoPoliticaDisco> cmbPoliticaDisco;
+    private JSlider sldVelocidad;
 
-    // Componentes para Crear Proceso ("Vista 1")
-    private JTextField txtNombreProceso, txtTiempoProceso, txtPrioridadProceso, txtRamProceso, txtDeadlineProceso;
-    private JComboBox<TipoProceso> comboTipoProceso;
-    private JComboBox<String> comboComputadores;
-    private JComboBox<String> comboBuffersObjetivo;
-    private JTextField txtCiclosOp, txtElementosMeta, txtFrecuenciaIO, txtDuracionIO;
-    private JPanel panelCamposEspeciales;
+    // Panel Izquierdo: JTree y Detalles del Nodo
+    private JTree arbolFS;
+    private DefaultTreeModel modeloArbol;
+    private JTextArea txtDetalleNodo;
 
-    // Componentes de Buffers
-    private JPanel panelBuffersGlobal;
+    // Panel Central: Disco Visual, Cabezal, Cola E/S y Tabla Asignación
+    private PanelMapaDisco panelMapaDisco;
+    private JLabel lblInfoCabezal;
+    private DefaultListModel<String> modeloColaIO;
+    private JTable tablaAsignacion;
+    private DefaultTableModel modeloTablaAsignacion;
 
-    // Colores del Dashboard
-    private static final Color COLOR_FONDO_VENTANA = new Color(24, 28, 38);
-    private static final Color COLOR_PANEL = new Color(34, 40, 52);
-    private static final Color COLOR_PANEL_INTERNO = new Color(20, 24, 32);
-    private static final Color COLOR_TEXTO_PRINCIPAL = new Color(230, 235, 245);
-    private static final Color COLOR_TEXTO_SECUNDARIO = new Color(170, 180, 200);
-    private static final Color COLOR_BORDE = new Color(55, 65, 85);
-    private static final Color COLOR_VERDE = new Color(0, 200, 115);
-    private static final Color COLOR_AZUL = new Color(41, 121, 255);
-    private static final Color COLOR_NARANJA = new Color(255, 145, 0);
+    // Panel Derecho: Computador Único (CPU, RAM y Colas 7 Estados)
+    private JLabel lblEstadoCPU;
+    private JProgressBar barRAM;
+    private DefaultListModel<Proceso> modListos;
+    private DefaultListModel<Proceso> modBloqueados;
+    private DefaultListModel<Proceso> modListoSusp;
+    private DefaultListModel<Proceso> modBloqSusp;
+    private DefaultListModel<Proceso> modTerminados;
+    private PanelGraficoDisco panelGraficoDisco;
 
-    // Timer de Swing para refrescar la interfaz (NO destructivo)
-    private javax.swing.Timer timerRefrescoGUI;
+    // Panel Inferior: Bitácora
+    private JTextArea txtLog;
 
-    public VentanaSimulador(Cluster cluster, RelojGlobal reloj) {
-        this.cluster = cluster;
-        this.reloj = reloj;
+    public VentanaSimulador(Cluster sistema) {
+        this.sistema = sistema;
 
-        setTitle("ÁvilaOS - Simulador de Sistema Operativo Distribuido");
-        setSize(1400, 900);
+        setTitle("ÁvilaOS 2.0 - Simulador de Sistema de Archivos, Disco y Memoria Virtual");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(1380, 840);
         setLocationRelativeTo(null);
-        setLayout(new BorderLayout(10, 10));
-        getContentPane().setBackground(COLOR_FONDO_VENTANA);
 
-        // 1. PANEL SUPERIOR: Barra de Control y Creación de Procesos ("Vista 1")
-        add(crearPanelSuperiorBarraControl(), BorderLayout.NORTH);
-
-        // 2. PANEL CENTRAL: Nodos del Clúster con Colas y CPU
-        add(crearPanelClusterNodos(), BorderLayout.CENTER);
-
-        // 3. PANEL DERECHO: Métricas, Gráfico CPU en Tiempo Real y Logs
-        add(crearPanelMétricasYLogs(), BorderLayout.EAST);
-
-        // 4. PANEL INFERIOR: Visualización de Buffers Compartidos y Semáforos
-        add(crearPanelBuffersGlobales(), BorderLayout.SOUTH);
-
-        // Iniciar temporizador visual seguro
-        iniciarTimerRefresco();
+        construirInterfaz();
+        conectarReloj();
+        refrescarTodaLaInterfaz();
     }
 
-    private JPanel crearPanelSuperiorBarraControl() {
-        JPanel contenedor = new JPanel(new BorderLayout(6, 6));
-        contenedor.setOpaque(false);
-        contenedor.setBorder(new EmptyBorder(8, 10, 4, 10));
+    private void construirInterfaz() {
+        JPanel root = new JPanel(new BorderLayout(8, 8));
+        root.setBackground(new Color(18, 21, 29));
+        root.setBorder(new EmptyBorder(8, 8, 8, 8));
 
-        // --- FILA 1: Control del Reloj, Velocidad, Pausa, Quantum y Métricas ---
-        JPanel panelRelojControl = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 6));
-        panelRelojControl.setBackground(COLOR_PANEL);
-        panelRelojControl.setBorder(crearBordeTitulado("Control de la Simulación y Reloj Global"));
+        // =====================================================================
+        // BARRA SUPERIOR DE CONTROL
+        // =====================================================================
+        JPanel barraTop = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        barraTop.setBackground(new Color(28, 33, 45));
 
-        lblReloj = new JLabel("Reloj de Simulación: Ciclo 0", SwingConstants.CENTER);
-        lblReloj.setFont(new Font("SansSerif", Font.BOLD, 14));
-        lblReloj.setForeground(COLOR_VERDE);
+        lblCiclo = new JLabel("Ciclo: 0");
+        lblCiclo.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        lblCiclo.setForeground(new Color(0, 229, 255));
 
-        btnPausar = new JButton("Pausar");
-        estilarBoton(btnPausar, new Color(220, 53, 69));
-        btnPausar.addActionListener(e -> alternarPausaSimulacion());
+        btnIniciarPausar = new JButton("Iniciar");
+        btnIniciarPausar.setBackground(new Color(0, 200, 115));
+        btnIniciarPausar.setForeground(Color.BLACK);
 
-        spinVelocidadMs = new JSpinner(new SpinnerNumberModel(reloj.getDuracionCicloMs(), 50, 3000, 100));
-        spinVelocidadMs.setPreferredSize(new Dimension(75, 24));
-        spinVelocidadMs.addChangeListener(e -> reloj.setDuracionCicloMs((int) spinVelocidadMs.getValue()));
+        btnPasoAPaso = new JButton("Paso +1");
 
-        spinQuantumRR = new JSpinner(new SpinnerNumberModel(3, 1, 20, 1));
-        spinQuantumRR.setPreferredSize(new Dimension(55, 24));
-        spinQuantumRR.addChangeListener(e -> {
-            int nuevoQ = (int) spinQuantumRR.getValue();
-            for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
-                cluster.getComputador(i).getPlanificador().setQuantum(nuevoQ);
+        cmbModoUsuario = new JComboBox<>(ModoUsuario.values());
+        cmbPoliticaCPU = new JComboBox<>(TipoPolitica.values());
+        cmbPoliticaCPU.setSelectedItem(sistema.getComputadorUnico().getPlanificador().getPolitica().getTipo());
+
+        cmbPoliticaDisco = new JComboBox<>(TipoPoliticaDisco.values());
+        cmbPoliticaDisco.setSelectedItem(sistema.getDisco().getPolitica().getTipo());
+
+        sldVelocidad = new JSlider(30, 1500, sistema.getReloj().getDuracionCicloMs());
+        sldVelocidad.setPreferredSize(new Dimension(110, 24));
+        sldVelocidad.setOpaque(false);
+
+        JButton btnNuevoProcCPU = new JButton("+ Proceso CPU");
+        JButton btnGuardarJSON = new JButton("Guardar JSON FS");
+        JButton btnMetricas = new JButton("Métricas");
+
+        barraTop.add(lblCiclo);
+        barraTop.add(btnIniciarPausar);
+        barraTop.add(btnPasoAPaso);
+        barraTop.add(new JLabel("Modo:") {{ setForeground(Color.WHITE); }});
+        barraTop.add(cmbModoUsuario);
+        barraTop.add(new JLabel("CPU:") {{ setForeground(Color.WHITE); }});
+        barraTop.add(cmbPoliticaCPU);
+        barraTop.add(new JLabel("Disco:") {{ setForeground(Color.WHITE); }});
+        barraTop.add(cmbPoliticaDisco);
+        barraTop.add(new JLabel("ms:") {{ setForeground(Color.WHITE); }});
+        barraTop.add(sldVelocidad);
+        barraTop.add(btnNuevoProcCPU);
+        barraTop.add(btnGuardarJSON);
+        barraTop.add(btnMetricas);
+
+        root.add(barraTop, BorderLayout.NORTH);
+
+        // =====================================================================
+        // PANEL CENTRAL DIVIDIDO EN 3 COLUMNAS
+        // =====================================================================
+        JSplitPane splitIzqCentro = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        splitIzqCentro.setDividerLocation(310);
+
+        JSplitPane splitCentroDer = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        splitCentroDer.setDividerLocation(640);
+
+        // --- COLUMNA 1: ÁRBOL DE ARCHIVOS Y OPERACIONES CRUD ---
+        JPanel pnlIzq = new JPanel(new BorderLayout(6, 6));
+        pnlIzq.setBackground(new Color(24, 28, 38));
+        pnlIzq.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(0, 180, 216)),
+                " Sistema de Archivos Jerárquico ", 0, 0, null, Color.WHITE));
+
+        modeloArbol = new DefaultTreeModel(new DefaultMutableTreeNode("/"));
+        arbolFS = new JTree(modeloArbol);
+        arbolFS.setBackground(new Color(30, 35, 48));
+        arbolFS.setForeground(Color.WHITE);
+        pnlIzq.add(new JScrollPane(arbolFS), BorderLayout.CENTER);
+
+        JPanel pnlCRUD = new JPanel(new BorderLayout(4, 4));
+        pnlCRUD.setOpaque(false);
+
+        JPanel botonesCRUD = new JPanel(new GridLayout(2, 2, 4, 4));
+        botonesCRUD.setOpaque(false);
+        JButton btnCrear = new JButton("Crear (C)");
+        JButton btnLeer = new JButton("Leer (R)");
+        JButton btnRenombrar = new JButton("Renombrar (U)");
+        JButton btnEliminar = new JButton("Eliminar (D)");
+        botonesCRUD.add(btnCrear);
+        botonesCRUD.add(btnLeer);
+        botonesCRUD.add(btnRenombrar);
+        botonesCRUD.add(btnEliminar);
+
+        txtDetalleNodo = new JTextArea(5, 20);
+        txtDetalleNodo.setEditable(false);
+        txtDetalleNodo.setBackground(new Color(18, 21, 29));
+        txtDetalleNodo.setForeground(new Color(165, 215, 255));
+        txtDetalleNodo.setFont(new Font("Consolas", Font.PLAIN, 11));
+
+        pnlCRUD.add(botonesCRUD, BorderLayout.NORTH);
+        pnlCRUD.add(new JScrollPane(txtDetalleNodo), BorderLayout.CENTER);
+        pnlIzq.add(pnlCRUD, BorderLayout.SOUTH);
+
+        // --- COLUMNA 2: DISCO SIMULADO Y TABLA DE ASIGNACIÓN ---
+        JPanel pnlCentro = new JPanel(new BorderLayout(6, 6));
+        pnlCentro.setBackground(new Color(24, 28, 38));
+
+        JPanel pnlDiscoTop = new JPanel(new BorderLayout(4, 4));
+        pnlDiscoTop.setBackground(new Color(24, 28, 38));
+        pnlDiscoTop.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(255, 171, 0)),
+                " Mapa Visual de Bloques del Disco y Swap ", 0, 0, null, Color.WHITE));
+
+        lblInfoCabezal = new JLabel("Cabezal: 0 | Dirección: ↑ | Desplazamiento Total: 0");
+        lblInfoCabezal.setForeground(new Color(255, 214, 0));
+        lblInfoCabezal.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        pnlDiscoTop.add(lblInfoCabezal, BorderLayout.NORTH);
+
+        panelMapaDisco = new PanelMapaDisco();
+        pnlDiscoTop.add(panelMapaDisco, BorderLayout.CENTER);
+
+        // Cola de Solicitudes E/S
+        modeloColaIO = new DefaultListModel<>();
+        JList<String> lstColaIO = new JList<>(modeloColaIO);
+        lstColaIO.setBackground(new Color(18, 21, 29));
+        lstColaIO.setForeground(new Color(255, 200, 120));
+        JScrollPane spColaIO = new JScrollPane(lstColaIO);
+        spColaIO.setPreferredSize(new Dimension(200, 95));
+        spColaIO.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Color.GRAY), " Cola de Solicitudes E/S ", 0, 0, null, Color.LIGHT_GRAY));
+        pnlDiscoTop.add(spColaIO, BorderLayout.SOUTH);
+
+        pnlCentro.add(pnlDiscoTop, BorderLayout.CENTER);
+
+        // Tabla de Asignación de Archivos
+        String[] columnas = {"Color", "Archivo", "Bloques", "Primer Blq", "Dueño", "Permiso", "Creador"};
+        modeloTablaAsignacion = new DefaultTableModel(columnas, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        tablaAsignacion = new JTable(modeloTablaAsignacion);
+        tablaAsignacion.setRowHeight(22);
+        tablaAsignacion.getColumnModel().getColumn(0).setMaxWidth(50);
+        tablaAsignacion.getColumnModel().getColumn(0).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                           boolean hasFocus, int row, int column) {
+                JLabel lbl = new JLabel();
+                lbl.setOpaque(true);
+                if (value instanceof Color) {
+                    lbl.setBackground((Color) value);
+                }
+                return lbl;
             }
-            registrarLog("Quantum global de Round Robin actualizado a " + nuevoQ);
         });
 
-        JButton btnMetricas = new JButton("Ver Métricas Completas");
-        estilarBoton(btnMetricas, COLOR_AZUL);
-        btnMetricas.addActionListener(e -> new DialogoMetricas(this, cluster, reloj.getCicloActual()).setVisible(true));
+        JScrollPane spTabla = new JScrollPane(tablaAsignacion);
+        spTabla.setPreferredSize(new Dimension(400, 210));
+        spTabla.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(0, 200, 115)),
+                " Tabla de Asignación de Archivos (Encadenada) ", 0, 0, null, Color.WHITE));
+        pnlCentro.add(spTabla, BorderLayout.SOUTH);
 
-        JButton btnCrearBuffer = new JButton("+ Crear Buffer");
-        estilarBoton(btnCrearBuffer, COLOR_NARANJA);
-        btnCrearBuffer.addActionListener(e -> mostrarDialogoCrearBuffer());
+        // --- COLUMNA 3: COMPUTADOR ÚNICO (7 ESTADOS) Y GRÁFICO ---
+        JPanel pnlDer = new JPanel(new BorderLayout(6, 6));
+        pnlDer.setBackground(new Color(24, 28, 38));
+        pnlDer.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(180, 90, 220)),
+                " Computador Único (Modelo de 7 Estados) ", 0, 0, null, Color.WHITE));
 
-        panelRelojControl.add(lblReloj);
-        panelRelojControl.add(btnPausar);
-        panelRelojControl.add(crearLabel("Velocidad (ms/ciclo):"));
-        panelRelojControl.add(spinVelocidadMs);
-        panelRelojControl.add(crearLabel("Quantum RR:"));
-        panelRelojControl.add(spinQuantumRR);
-        panelRelojControl.add(btnMetricas);
-        panelRelojControl.add(btnCrearBuffer);
+        JPanel pnlCPURAM = new JPanel(new GridLayout(2, 1, 4, 4));
+        pnlCPURAM.setOpaque(false);
+        lblEstadoCPU = new JLabel("CPU: [LIBRE - Sistema Operativo]");
+        lblEstadoCPU.setForeground(new Color(105, 240, 174));
+        lblEstadoCPU.setFont(new Font("Segoe UI", Font.BOLD, 13));
 
-        // --- FILA 2: Formulario Completo de Creación de Procesos ("Vista 1") ---
-        // BoxLayout en Y: campos base arriba y campos de Productor/Consumidor/IO abajo,
-        // para que al aparecer no desborden por el bug de altura preferida de FlowLayout.
-        JPanel panelCrear = new JPanel();
-        panelCrear.setLayout(new BoxLayout(panelCrear, BoxLayout.Y_AXIS));
-        panelCrear.setBackground(COLOR_PANEL);
-        panelCrear.setBorder(crearBordeTitulado("Creación y Asignación de Procesos (Vista 1)"));
-        panelCrear.setAlignmentX(Component.LEFT_ALIGNMENT);
+        barRAM = new JProgressBar(0, sistema.getComputadorUnico().getMemoriaTotal());
+        barRAM.setStringPainted(true);
+        pnlCPURAM.add(lblEstadoCPU);
+        pnlCPURAM.add(barRAM);
+        pnlDer.add(pnlCPURAM, BorderLayout.NORTH);
 
-        txtNombreProceso = crearTextField("P_" + GeneradorID.generar(), 7);
-        txtTiempoProceso = crearTextField("6", 3);
-        txtPrioridadProceso = crearTextField("1", 3);
-        txtRamProceso = crearTextField("1024", 4);
-        txtDeadlineProceso = crearTextField("15", 3);
+        JPanel pnlColas = new JPanel(new GridLayout(5, 1, 4, 4));
+        pnlColas.setOpaque(false);
+        modListos = new DefaultListModel<>();
+        modBloqueados = new DefaultListModel<>();
+        modListoSusp = new DefaultListModel<>();
+        modBloqSusp = new DefaultListModel<>();
+        modTerminados = new DefaultListModel<>();
 
-        comboTipoProceso = new JComboBox<>(TipoProceso.values());
-        comboTipoProceso.setBackground(COLOR_PANEL_INTERNO);
-        comboTipoProceso.setForeground(COLOR_TEXTO_PRINCIPAL);
-        comboTipoProceso.addActionListener(e -> actualizarCamposSegunTipoProceso());
+        pnlColas.add(crearPanelCola("Cola LISTOS (RAM)", modListos, new Color(0, 200, 115)));
+        pnlColas.add(crearPanelCola("Cola BLOQUEADOS (E/S - RAM)", modBloqueados, new Color(255, 171, 0)));
+        pnlColas.add(crearPanelCola("Cola LISTO / SUSPENDIDO (Swap)", modListoSusp, new Color(0, 229, 255)));
+        pnlColas.add(crearPanelCola("Cola BLOQUEADO / SUSPENDIDO (Swap)", modBloqSusp, new Color(200, 120, 255)));
+        pnlColas.add(crearPanelCola("Procesos TERMINADOS", modTerminados, Color.LIGHT_GRAY));
 
-        comboComputadores = new JComboBox<>();
-        comboComputadores.setBackground(COLOR_PANEL_INTERNO);
-        comboComputadores.setForeground(COLOR_TEXTO_PRINCIPAL);
-        actualizarComboComputadores();
+        pnlDer.add(pnlColas, BorderLayout.CENTER);
 
-        comboBuffersObjetivo = new JComboBox<>();
-        comboBuffersObjetivo.setBackground(COLOR_PANEL_INTERNO);
-        comboBuffersObjetivo.setForeground(COLOR_TEXTO_PRINCIPAL);
-        actualizarComboBuffers();
+        panelGraficoDisco = new PanelGraficoDisco();
+        pnlDer.add(panelGraficoDisco, BorderLayout.SOUTH);
 
-        txtCiclosOp = crearTextField("2", 3);
-        txtElementosMeta = crearTextField("4", 3);
-        txtFrecuenciaIO = crearTextField("3", 3);
-        txtDuracionIO = crearTextField("2", 3);
+        splitCentroDer.setLeftComponent(pnlCentro);
+        splitCentroDer.setRightComponent(pnlDer);
+        splitIzqCentro.setLeftComponent(pnlIzq);
+        splitIzqCentro.setRightComponent(splitCentroDer);
 
-        panelCamposEspeciales = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
-        panelCamposEspeciales.setOpaque(false);
-        panelCamposEspeciales.setAlignmentX(Component.LEFT_ALIGNMENT);
+        root.add(splitIzqCentro, BorderLayout.CENTER);
 
-        JButton btnAgregar = new JButton("Crear Proceso");
-        estilarBoton(btnAgregar, COLOR_VERDE);
-        btnAgregar.addActionListener(e -> accionCrearProceso());
+        // =====================================================================
+        // BITÁCORA INFERIOR
+        // =====================================================================
+        txtLog = new JTextArea(5, 50);
+        txtLog.setEditable(false);
+        txtLog.setBackground(new Color(14, 16, 22));
+        txtLog.setForeground(new Color(180, 255, 180));
+        txtLog.setFont(new Font("Consolas", Font.PLAIN, 11));
+        JScrollPane spLog = new JScrollPane(txtLog);
+        spLog.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Color.DARK_GRAY), " Bitácora de Eventos del Sistema ", 0, 0, null, Color.LIGHT_GRAY));
+        root.add(spLog, BorderLayout.SOUTH);
 
-        JPanel filaBase = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
-        filaBase.setOpaque(false);
-        filaBase.setAlignmentX(Component.LEFT_ALIGNMENT);
-        filaBase.add(crearLabel("Nombre:"));
-        filaBase.add(txtNombreProceso);
-        filaBase.add(crearLabel("Tipo:"));
-        filaBase.add(comboTipoProceso);
-        filaBase.add(crearLabel("Tiempo CPU:"));
-        filaBase.add(txtTiempoProceso);
-        filaBase.add(crearLabel("Prioridad:"));
-        filaBase.add(txtPrioridadProceso);
-        filaBase.add(crearLabel("RAM (MB):"));
-        filaBase.add(txtRamProceso);
-        filaBase.add(crearLabel("Deadline:"));
-        filaBase.add(txtDeadlineProceso);
-        filaBase.add(crearLabel("Destino:"));
-        filaBase.add(comboComputadores);
-        filaBase.add(btnAgregar);
+        setContentPane(root);
 
-        panelCrear.add(filaBase);
-        panelCrear.add(panelCamposEspeciales);
+        // =====================================================================
+        // LISTENERS Y ACCIONES
+        // =====================================================================
+        btnIniciarPausar.addActionListener(e -> {
+            if (sistema.getReloj().isPausado()) {
+                sistema.getReloj().iniciarSimulacion();
+                btnIniciarPausar.setText("Pausar");
+                btnIniciarPausar.setBackground(new Color(255, 171, 0));
+            } else {
+                sistema.getReloj().pausarSimulacion();
+                btnIniciarPausar.setText("Reanudar");
+                btnIniciarPausar.setBackground(new Color(0, 200, 115));
+            }
+        });
 
-        actualizarCamposSegunTipoProceso();
+        btnPasoAPaso.addActionListener(e -> {
+            if (!sistema.getReloj().isPausado()) {
+                sistema.getReloj().pausarSimulacion();
+                btnIniciarPausar.setText("Reanudar");
+            }
+            sistema.getReloj().avanzarUnCiclo();
+        });
 
-        contenedor.add(panelRelojControl, BorderLayout.NORTH);
-        contenedor.add(panelCrear, BorderLayout.SOUTH);
-        return contenedor;
+        cmbModoUsuario.addActionListener(e -> {
+            ModoUsuario m = (ModoUsuario) cmbModoUsuario.getSelectedItem();
+            sistema.getSistemaArchivos().setModoActual(m);
+            refrescarBitacora();
+        });
+
+        cmbPoliticaCPU.addActionListener(e -> {
+            TipoPolitica tp = (TipoPolitica) cmbPoliticaCPU.getSelectedItem();
+            sistema.cambiarPoliticaCPU(VentanaConfiguracionInicial.crearPoliticaCPU(tp));
+            refrescarBitacora();
+        });
+
+        cmbPoliticaDisco.addActionListener(e -> {
+            TipoPoliticaDisco td = (TipoPoliticaDisco) cmbPoliticaDisco.getSelectedItem();
+            sistema.getDisco().setPolitica(VentanaConfiguracionInicial.crearPoliticaDisco(td));
+            refrescarBitacora();
+        });
+
+        sldVelocidad.addChangeListener(e -> sistema.getReloj().setDuracionCicloMs(sldVelocidad.getValue()));
+
+        btnNuevoProcCPU.addActionListener(e -> dialogoCrearProcesoCPU());
+        btnGuardarJSON.addActionListener(e -> exportarSistemaArchivosJSON());
+        btnMetricas.addActionListener(e -> new DialogoMetricas(this, sistema).setVisible(true));
+
+        arbolFS.addTreeSelectionListener(e -> mostrarDetallesNodoSeleccionado());
+        btnCrear.addActionListener(e -> accionCRUDCrear());
+        btnLeer.addActionListener(e -> accionCRUDLeer());
+        btnRenombrar.addActionListener(e -> accionCRUDRenombrar());
+        btnEliminar.addActionListener(e -> accionCRUDEliminar());
     }
 
-    private void actualizarCamposSegunTipoProceso() {
-        panelCamposEspeciales.removeAll();
-        TipoProceso tipo = (TipoProceso) comboTipoProceso.getSelectedItem();
-
-        if (tipo == TipoProceso.PRODUCTOR || tipo == TipoProceso.CONSUMIDOR) {
-            actualizarComboBuffers();
-            panelCamposEspeciales.add(crearLabel("Buffer:"));
-            panelCamposEspeciales.add(comboBuffersObjetivo);
-            panelCamposEspeciales.add(crearLabel("Ciclos/Op:"));
-            panelCamposEspeciales.add(txtCiclosOp);
-            panelCamposEspeciales.add(crearLabel("Meta elem:"));
-            panelCamposEspeciales.add(txtElementosMeta);
-        } else if (tipo == TipoProceso.IO_BOUND) {
-            panelCamposEspeciales.add(crearLabel("Cada (ciclos):"));
-            panelCamposEspeciales.add(txtFrecuenciaIO);
-            panelCamposEspeciales.add(crearLabel("Duración E/S:"));
-            panelCamposEspeciales.add(txtDuracionIO);
-        }
-
-        panelCamposEspeciales.setVisible(panelCamposEspeciales.getComponentCount() > 0);
-        panelCamposEspeciales.revalidate();
-        panelCamposEspeciales.repaint();
-
-        // Recalcular altura del panel superior (BorderLayout.NORTH) al mostrar/ocultar campos.
-        Container ancestro = panelCamposEspeciales.getParent();
-        while (ancestro != null) {
-            ancestro.revalidate();
-            ancestro.repaint();
-            if (ancestro == getContentPane()) break;
-            ancestro = ancestro.getParent();
-        }
+    private JScrollPane crearPanelCola(String titulo, DefaultListModel<Proceso> modelo, Color bordeColor) {
+        JList<Proceso> lista = new JList<>(modelo);
+        lista.setBackground(new Color(18, 21, 29));
+        lista.setForeground(Color.WHITE);
+        lista.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        lista.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    Proceso sel = lista.getSelectedValue();
+                    if (sel != null) new DialogoPCB(VentanaSimulador.this, sel).setVisible(true);
+                }
+            }
+        });
+        JScrollPane sp = new JScrollPane(lista);
+        sp.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(bordeColor), " " + titulo + " ", 0, 0, null, bordeColor));
+        return sp;
     }
 
-    private void actualizarComboComputadores() {
-        comboComputadores.removeAllItems();
-        comboComputadores.addItem("Automático (Mayor RAM libre)");
-        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
-            comboComputadores.addItem(cluster.getComputador(i).getNombre());
-        }
+    private void conectarReloj() {
+        sistema.getReloj().setListenerActualizacionGUI(() -> SwingUtilities.invokeLater(this::refrescarTodaLaInterfaz));
     }
 
-    private void actualizarComboBuffers() {
-        comboBuffersObjetivo.removeAllItems();
-        ListaEnlazada<Buffer> bufs = cluster.getBuffers();
-        for (int i = 0; i < bufs.getTamano(); i++) {
-            comboBuffersObjetivo.addItem(bufs.obtener(i).getId());
-        }
-    }
+    public void refrescarTodaLaInterfaz() {
+        lblCiclo.setText("Ciclo: " + sistema.getReloj().getCicloActual());
 
-    private void alternarPausaSimulacion() {
-        if (reloj.isPausado()) {
-            reloj.reanudar();
-            btnPausar.setText("Pausar");
-            btnPausar.setBackground(new Color(220, 53, 69));
-            registrarLog("Simulación reanudada.");
+        // CPU y RAM
+        Computador comp = sistema.getComputadorUnico();
+        Proceso enCPU = comp.getCpu().getProcesoActual();
+        if (enCPU != null) {
+            lblEstadoCPU.setText("CPU: " + enCPU.getNombre() + " (PC=" + enCPU.getPc() + "/" + enCPU.getInstruccionesTotales() + ")");
+            lblEstadoCPU.setForeground(new Color(255, 214, 0));
         } else {
-            reloj.pausar();
-            btnPausar.setText("Reanudar");
-            btnPausar.setBackground(COLOR_VERDE);
-            registrarLog("Simulación pausada.");
+            lblEstadoCPU.setText("CPU: [LIBRE - Sistema Operativo]");
+            lblEstadoCPU.setForeground(new Color(105, 240, 174));
+        }
+
+        barRAM.setValue(comp.getMemoriaUsada());
+        barRAM.setString("RAM: " + comp.getMemoriaUsada() + " / " + comp.getMemoriaTotal() + " MB");
+
+        // Colas 7 Estados
+        actualizarModeloCola(modListos, comp.getColaListos().obtenerListaElementos());
+        actualizarModeloCola(modBloqueados, comp.getColaBloqueados().obtenerListaElementos());
+        actualizarModeloCola(modListoSusp, comp.getColaListoSuspendidos().obtenerListaElementos());
+        actualizarModeloCola(modBloqSusp, comp.getColaBloqueadoSuspendidos().obtenerListaElementos());
+        actualizarModeloCola(modTerminados, comp.getColaTerminados().obtenerListaElementos());
+
+        // Disco y Cabezal
+        DiscoSimulado disco = sistema.getDisco();
+        String dir = disco.isDireccionSubiendo() ? "↑ (Subiendo)" : "↓ (Bajando)";
+        lblInfoCabezal.setText("Cabezal: Bloque " + disco.getCabezalActual() +
+                " | Dirección: " + dir +
+                " | Desplazamiento Total: " + disco.getDesplazamientoTotal() +
+                " | Swap Libre: " + disco.contarBloquesLibresSwap() + "/" + disco.getTamanoSwapBloques());
+        panelMapaDisco.repaint();
+        panelGraficoDisco.registrarPunto(disco.getDesplazamientoTotal());
+
+        // Cola de Solicitudes E/S
+        modeloColaIO.clear();
+        if (disco.getSolicitudEnCurso() != null) {
+            modeloColaIO.addElement("[EN CURSO] " + disco.getSolicitudEnCurso().toString());
+        }
+        ListaEnlazada<SolicitudIO> pend = disco.getColaSolicitudesSnapshot();
+        for (int i = 0; i < pend.getTamano(); i++) {
+            modeloColaIO.addElement(pend.obtener(i).toString());
+        }
+
+        // Árbol y Tabla de Asignación
+        reconstruirArbolFS();
+        actualizarTablaAsignacion();
+        refrescarBitacora();
+    }
+
+    private void actualizarModeloCola(DefaultListModel<Proceso> mod, ListaEnlazada<Proceso> lista) {
+        mod.clear();
+        for (int i = 0; i < lista.getTamano(); i++) {
+            mod.addElement(lista.obtener(i));
         }
     }
 
-    private void accionCrearProceso() {
-        try {
-            String nombre = txtNombreProceso.getText().trim();
-            int tiempo = Integer.parseInt(txtTiempoProceso.getText().trim());
-            int prioridad = Integer.parseInt(txtPrioridadProceso.getText().trim());
-            int ram = Integer.parseInt(txtRamProceso.getText().trim());
-            int deadline = Integer.parseInt(txtDeadlineProceso.getText().trim());
-            TipoProceso tipo = (TipoProceso) comboTipoProceso.getSelectedItem();
+    private void reconstruirArbolFS() {
+        SistemaArchivos fs = sistema.getSistemaArchivos();
+        if (fs == null) return;
+        DefaultMutableTreeNode rootNode = construirNodoVisual(fs.getRaiz());
+        modeloArbol.setRoot(rootNode);
+        for (int i = 0; i < arbolFS.getRowCount(); i++) {
+            arbolFS.expandRow(i);
+        }
+    }
 
-            if (nombre.isEmpty() || tiempo <= 0 || ram <= 0 || deadline <= 0) {
-                JOptionPane.showMessageDialog(this, "Todos los valores numéricos deben ser mayores a 0.", "Error de Rango", JOptionPane.WARNING_MESSAGE);
+    private DefaultMutableTreeNode construirNodoVisual(EntradaFS entrada) {
+        DefaultMutableTreeNode nodo = new DefaultMutableTreeNode(entrada);
+        if (entrada.isEsDirectorio() && entrada.getHijos() != null) {
+            for (int i = 0; i < entrada.getHijos().getTamano(); i++) {
+                nodo.add(construirNodoVisual(entrada.getHijos().obtener(i)));
+            }
+        }
+        return nodo;
+    }
+
+    private void actualizarTablaAsignacion() {
+        modeloTablaAsignacion.setRowCount(0);
+        ListaEnlazada<EntradaFS> archivos = sistema.getSistemaArchivos().obtenerTodosLosArchivos();
+        for (int i = 0; i < archivos.getTamano(); i++) {
+            EntradaFS f = archivos.obtener(i);
+            modeloTablaAsignacion.addRow(new Object[]{
+                f.getColor(),
+                f.getRutaCompleta(),
+                f.getTamanoBloques(),
+                f.getPrimerBloque(),
+                f.getDueno(),
+                f.getPermiso().getValorJson(),
+                f.getProcesoCreador()
+            });
+        }
+    }
+
+    private void refrescarBitacora() {
+        txtLog.setText(sistema.getLogger().obtenerHistorialCompleto());
+    }
+
+    private EntradaFS obtenerEntradaSeleccionadaArbol() {
+        TreePath path = arbolFS.getSelectionPath();
+        if (path == null) return sistema.getSistemaArchivos().getRaiz();
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        if (node.getUserObject() instanceof EntradaFS) {
+            return (EntradaFS) node.getUserObject();
+        }
+        return sistema.getSistemaArchivos().getRaiz();
+    }
+
+    private void mostrarDetallesNodoSeleccionado() {
+        EntradaFS sel = obtenerEntradaSeleccionadaArbol();
+        if (sel == null) return;
+        txtDetalleNodo.setText(
+                "Ruta: " + sel.getRutaCompleta() + "\n" +
+                "Tipo: " + (sel.isEsDirectorio() ? "DIRECTORIO" : "ARCHIVO") + "\n" +
+                "Dueño: " + sel.getDueno() + " | Permiso: " + sel.getPermiso().getValorJson() + "\n" +
+                "Tamaño: " + sel.getTamanoBloques() + " bloques | Bloque Inicial: " + sel.getPrimerBloque() + "\n" +
+                "Proceso Creador: " + sel.getProcesoCreador()
+        );
+    }
+
+    // =========================================================================
+    // ACCIONES CRUD DESDE LA INTERFAZ
+    // =========================================================================
+
+    private void accionCRUDCrear() {
+        EntradaFS sel = obtenerEntradaSeleccionadaArbol();
+        String rutaDir = sel.isEsDirectorio() ? sel.getRutaCompleta() : "/";
+
+        String[] opciones = {"Archivo", "Directorio"};
+        int tipo = JOptionPane.showOptionDialog(this, "¿Qué desea crear en " + rutaDir + "?",
+                "Crear Elemento", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, opciones, opciones[0]);
+        if (tipo < 0) return;
+
+        boolean esDir = (tipo == 1);
+        String nombre = JOptionPane.showInputDialog(this, "Nombre del " + (esDir ? "directorio:" : "archivo:"));
+        if (nombre == null || nombre.trim().isEmpty()) return;
+
+        int bloques = 0;
+        if (!esDir) {
+            String blqStr = JOptionPane.showInputDialog(this, "Tamaño en bloques:", "4");
+            if (blqStr == null) return;
+            try {
+                bloques = Math.max(1, Integer.parseInt(blqStr.trim()));
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Cantidad de bloques inválida.");
                 return;
             }
+        }
 
-            int id = GeneradorID.generar();
-            Proceso p = new Proceso(id, nombre, tiempo, prioridad, ram, deadline, tipo);
+        String error = sistema.solicitarOperacionCRUDDesdeGUI(
+                TipoOperacionIO.CREATE, rutaDir, nombre.trim(), esDir, bloques, PermisoArchivo.PUBLICO);
+        if (error != null) {
+            JOptionPane.showMessageDialog(this, error, "Acceso Denegado", JOptionPane.WARNING_MESSAGE);
+        }
+        refrescarTodaLaInterfaz();
+    }
 
-            if (tipo == TipoProceso.PRODUCTOR || tipo == TipoProceso.CONSUMIDOR) {
-                if (comboBuffersObjetivo.getSelectedItem() == null) {
-                    JOptionPane.showMessageDialog(this, "Debe crear primero al menos un buffer para procesos productores o consumidores.", "Buffer Requerido", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-                p.setBufferObjetivo((String) comboBuffersObjetivo.getSelectedItem());
-                p.setCiclosPorOperacion(Math.max(1, Integer.parseInt(txtCiclosOp.getText().trim())));
-                p.setElementosMeta(Math.max(1, Integer.parseInt(txtElementosMeta.getText().trim())));
-            } else if (tipo == TipoProceso.IO_BOUND) {
-                p.setCiclosEntreIO(Math.max(1, Integer.parseInt(txtFrecuenciaIO.getText().trim())));
-                p.setDuracionIO(Math.max(1, Integer.parseInt(txtDuracionIO.getText().trim())));
-            }
+    private void accionCRUDLeer() {
+        EntradaFS sel = obtenerEntradaSeleccionadaArbol();
+        if (sel == null || sel.isEsDirectorio()) {
+            JOptionPane.showMessageDialog(this, "Seleccione un archivo en el árbol para leer.");
+            return;
+        }
+        String error = sistema.solicitarOperacionCRUDDesdeGUI(
+                TipoOperacionIO.READ, sel.getRutaCompleta(), sel.getNombre(), false, sel.getTamanoBloques(), sel.getPermiso());
+        if (error != null) {
+            JOptionPane.showMessageDialog(this, error, "Acceso Denegado", JOptionPane.WARNING_MESSAGE);
+        }
+        refrescarTodaLaInterfaz();
+    }
 
-            int seleccion = comboComputadores.getSelectedIndex();
-            int cicloActual = reloj.getCicloActual();
+    private void accionCRUDRenombrar() {
+        EntradaFS sel = obtenerEntradaSeleccionadaArbol();
+        if (sel == null || "/".equals(sel.getRutaCompleta())) {
+            JOptionPane.showMessageDialog(this, "Seleccione un archivo o directorio válido para renombrar.");
+            return;
+        }
+        String nuevoNombre = JOptionPane.showInputDialog(this, "Nuevo nombre para " + sel.getNombre() + ":", sel.getNombre());
+        if (nuevoNombre == null || nuevoNombre.trim().isEmpty()) return;
 
-            if (seleccion == 0) {
-                cluster.asignarProcesoAutomatico(p, cicloActual);
-            } else {
-                int idx = seleccion - 1;
-                cluster.asignarProcesoManual(p, idx, cicloActual);
-            }
+        String error = sistema.solicitarOperacionCRUDDesdeGUI(
+                TipoOperacionIO.UPDATE, sel.getRutaCompleta(), nuevoNombre.trim(), sel.isEsDirectorio(), sel.getTamanoBloques(), sel.getPermiso());
+        if (error != null) {
+            JOptionPane.showMessageDialog(this, error, "Acceso Denegado", JOptionPane.WARNING_MESSAGE);
+        }
+        refrescarTodaLaInterfaz();
+    }
 
-            txtNombreProceso.setText("P_" + GeneradorID.generar());
+    private void accionCRUDEliminar() {
+        EntradaFS sel = obtenerEntradaSeleccionadaArbol();
+        if (sel == null || "/".equals(sel.getRutaCompleta())) {
+            JOptionPane.showMessageDialog(this, "Seleccione un archivo o directorio válido para eliminar.");
+            return;
+        }
+        int conf = JOptionPane.showConfirmDialog(this, "¿Eliminar " + sel.getRutaCompleta() + "?", "Confirmar", JOptionPane.YES_NO_OPTION);
+        if (conf != JOptionPane.YES_OPTION) return;
 
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Por favor ingrese números enteros válidos en los campos numéricos.", "Error de Formato", JOptionPane.ERROR_MESSAGE);
+        String error = sistema.solicitarOperacionCRUDDesdeGUI(
+                TipoOperacionIO.DELETE, sel.getRutaCompleta(), sel.getNombre(), sel.isEsDirectorio(), sel.getTamanoBloques(), sel.getPermiso());
+        if (error != null) {
+            JOptionPane.showMessageDialog(this, error, "Acceso Denegado", JOptionPane.WARNING_MESSAGE);
+        }
+        refrescarTodaLaInterfaz();
+    }
+
+    private void dialogoCrearProcesoCPU() {
+        JTextField txtNombre = new JTextField("Tarea_CPU");
+        JSpinner spnInst = new JSpinner(new SpinnerNumberModel(8, 1, 100, 1));
+        JSpinner spnPrio = new JSpinner(new SpinnerNumberModel(2, 1, 10, 1));
+        JSpinner spnMem = new JSpinner(new SpinnerNumberModel(128, 16, 2048, 16));
+        JSpinner spnDead = new JSpinner(new SpinnerNumberModel(200, 10, 2000, 10));
+
+        JPanel p = new JPanel(new GridLayout(5, 2, 6, 6));
+        p.add(new JLabel("Nombre:")); p.add(txtNombre);
+        p.add(new JLabel("Instrucciones:")); p.add(spnInst);
+        p.add(new JLabel("Prioridad (1=Alta):")); p.add(spnPrio);
+        p.add(new JLabel("Memoria RAM (MB):")); p.add(spnMem);
+        p.add(new JLabel("Deadline (ciclos):")); p.add(spnDead);
+
+        if (JOptionPane.showConfirmDialog(this, p, "Nuevo Proceso CPU-Bound", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+            sistema.crearProcesoCPU(txtNombre.getText().trim(), (int) spnInst.getValue(),
+                    (int) spnPrio.getValue(), (int) spnMem.getValue(), (int) spnDead.getValue());
+            refrescarTodaLaInterfaz();
         }
     }
 
-    private void mostrarDialogoCrearBuffer() {
-        JTextField txtId = new JTextField("Buffer_" + (cluster.getBuffers().getTamano() + 1), 10);
-        JTextField txtCap = new JTextField("5", 5);
-        JComboBox<String> comboAnfitrion = new JComboBox<>();
-        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
-            comboAnfitrion.addItem(cluster.getComputador(i).getNombre());
-        }
-
-        JPanel p = new JPanel(new GridLayout(3, 2, 6, 6));
-        p.add(new JLabel("ID del Buffer:"));
-        p.add(txtId);
-        p.add(new JLabel("Capacidad:"));
-        p.add(txtCap);
-        p.add(new JLabel("Computador Anfitrión:"));
-        p.add(comboAnfitrion);
-
-        int res = JOptionPane.showConfirmDialog(this, p, "Crear Nuevo Buffer de Capacidad Limitada", JOptionPane.OK_CANCEL_OPTION);
-        if (res == JOptionPane.OK_OPTION) {
+    private void exportarSistemaArchivosJSON() {
+        JFileChooser fc = new JFileChooser(".");
+        fc.setSelectedFile(new File("filesystem_exportado.json"));
+        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
-                String id = txtId.getText().trim();
-                int cap = Integer.parseInt(txtCap.getText().trim());
-                String anf = (String) comboAnfitrion.getSelectedItem();
-                if (cap <= 0) throw new NumberFormatException();
-
-                Buffer b = new Buffer(id, cap, anf);
-                cluster.agregarBuffer(b);
-                actualizarComboBuffers();
-                refrescarPanelBuffers();
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Capacidad inválida.", "Error", JOptionPane.ERROR_MESSAGE);
+                GestorJSON.guardarSistemaArchivosJSON(sistema.getSistemaArchivos(), fc.getSelectedFile());
+                JOptionPane.showMessageDialog(this, "Estado guardado exitosamente en JSON.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error al guardar JSON: " + ex.getMessage());
             }
         }
     }
 
-    private JPanel crearPanelClusterNodos() {
-        JPanel contenedorNodos = new JPanel(new GridLayout(1, cluster.getCantidadComputadores(), 10, 10));
-        contenedorNodos.setOpaque(false);
-        contenedorNodos.setBorder(new EmptyBorder(0, 10, 0, 10));
-
-        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
-            Computador nodo = cluster.getComputador(i);
-            contenedorNodos.add(crearPanelTarjetaNodo(nodo));
-        }
-
-        JScrollPane scroll = new JScrollPane(contenedorNodos);
-        scroll.setOpaque(false);
-        scroll.getViewport().setOpaque(false);
-        scroll.setBorder(null);
-
-        return contenedorNodos;
-    }
-
-    private JPanel crearPanelTarjetaNodo(Computador nodo) {
-        JPanel tarjeta = new JPanel(new BorderLayout(6, 6));
-        tarjeta.setBackground(COLOR_PANEL);
-        tarjeta.setBorder(crearBordeTitulado(nodo.getNombre()));
-
-        // --- ENCABEZADO: POLÍTICA Y RAM ---
-        JPanel headerNodo = new JPanel(new GridLayout(3, 1, 4, 4));
-        headerNodo.setOpaque(false);
-
-        JComboBox<TipoPolitica> comboPolitica = new JComboBox<>(TipoPolitica.values());
-        comboPolitica.setSelectedItem(nodo.getPlanificador().getPolitica().getTipo());
-        comboPolitica.setBackground(COLOR_PANEL_INTERNO);
-        comboPolitica.setForeground(COLOR_TEXTO_PRINCIPAL);
-        comboPolitica.addActionListener(e -> {
-            TipoPolitica sel = (TipoPolitica) comboPolitica.getSelectedItem();
-            switch (sel) {
-                case FCFS: nodo.getPlanificador().setPolitica(new PoliticaFCFS()); break;
-                case SJF: nodo.getPlanificador().setPolitica(new PoliticaSJF()); break;
-                case EDF: nodo.getPlanificador().setPolitica(new PoliticaEDF()); break;
-                case PRIORIDAD_APROPIATIVA: nodo.getPlanificador().setPolitica(new PoliticaPrioridadApropiativa()); break;
-                default: nodo.getPlanificador().setPolitica(new PoliticaRoundRobin()); break;
-            }
-        });
-
-        JProgressBar barRAM = new JProgressBar(0, nodo.getRamTotal());
-        barRAM.setName("barRAM_" + nodo.getNombre());
-        barRAM.setStringPainted(true);
-        barRAM.setForeground(COLOR_VERDE);
-        barRAM.setBackground(COLOR_PANEL_INTERNO);
-
-        // Panel de Estado de la CPU
-        JLabel lblCPUInfo = new JLabel("CPU: Idle | PC: 0 | MAR: 0 | Modo: SISTEMA_OPERATIVO", SwingConstants.CENTER);
-        lblCPUInfo.setName("lblCPU_" + nodo.getNombre());
-        lblCPUInfo.setFont(new Font("Monospaced", Font.BOLD, 10));
-        lblCPUInfo.setForeground(COLOR_AZUL);
-
-        headerNodo.add(comboPolitica);
-        headerNodo.add(barRAM);
-        headerNodo.add(lblCPUInfo);
-        tarjeta.add(headerNodo, BorderLayout.NORTH);
-
-        // --- COLAS DE PROCESOS (NUEVOS, LISTOS, CPU, BLOQUEADOS, TERMINADOS) ---
-        JPanel panelColas = new JPanel(new GridLayout(1, 5, 4, 4));
-        panelColas.setOpaque(false);
-
-        panelColas.add(crearSubPanelCola("Nuevos (RAM)", "lstNuevos_" + nodo.getNombre()));
-        panelColas.add(crearSubPanelCola("Listos", "lstListos_" + nodo.getNombre()));
-        panelColas.add(crearSubPanelCola("En CPU", "lstCPU_" + nodo.getNombre()));
-        panelColas.add(crearSubPanelCola("Bloqueados", "lstBloq_" + nodo.getNombre()));
-        panelColas.add(crearSubPanelCola("Terminados", "lstTerm_" + nodo.getNombre()));
-
-        tarjeta.add(panelColas, BorderLayout.CENTER);
-
-        return tarjeta;
-    }
-
-    private JPanel crearSubPanelCola(String titulo, String nombreComponente) {
-        JPanel p = new JPanel(new BorderLayout());
-        p.setBackground(COLOR_PANEL_INTERNO);
-        p.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(COLOR_BORDE), titulo,
-                TitledBorder.CENTER, TitledBorder.TOP, new Font("SansSerif", Font.BOLD, 10), COLOR_TEXTO_SECUNDARIO));
-
-        DefaultListModel<ProcesoWrapper> model = new DefaultListModel<>();
-        JList<ProcesoWrapper> lista = new JList<>(model);
-        lista.setName(nombreComponente);
-        lista.setBackground(COLOR_PANEL_INTERNO);
-        lista.setForeground(COLOR_TEXTO_PRINCIPAL);
-        lista.setFont(new Font("SansSerif", Font.PLAIN, 10));
-
-        // Doble clic para abrir el PCB completo
-        lista.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) {
-                    ProcesoWrapper seleccionado = lista.getSelectedValue();
-                    if (seleccionado != null && seleccionado.proceso != null) {
-                        new DialogoPCB(VentanaSimulador.this, seleccionado.proceso).setVisible(true);
-                    }
-                }
-            }
-        });
-
-        JScrollPane sp = new JScrollPane(lista);
-        sp.setBorder(null);
-        p.add(sp, BorderLayout.CENTER);
-        return p;
-    }
-
-    private JPanel crearPanelMétricasYLogs() {
-        JPanel panelDerecho = new JPanel(new BorderLayout(8, 8));
-        panelDerecho.setPreferredSize(new Dimension(380, 0));
-        panelDerecho.setBackground(COLOR_PANEL);
-        panelDerecho.setBorder(crearBordeTitulado("Rendimiento en Tiempo Real y Registro"));
-
-        // Barras Globales de Uso
-        JPanel panelBarras = new JPanel(new GridLayout(2, 1, 4, 4));
-        panelBarras.setOpaque(false);
-        barUsoCPUGlobal = crearBarraProgresiva("Uso CPU Promedio", COLOR_AZUL);
-        barUsoRAMGlobal = crearBarraProgresiva("Ocupación RAM Clúster", COLOR_NARANJA);
-        panelBarras.add(barUsoCPUGlobal);
-        panelBarras.add(barUsoRAMGlobal);
-
-        // Gráfico de Utilización de CPU vs Tiempo
-        panelGrafico = new PanelGraficoCPU(cluster);
-        panelGrafico.setBorder(BorderFactory.createLineBorder(COLOR_BORDE));
-
-        JPanel panelSuperiorDerecho = new JPanel(new BorderLayout(4, 4));
-        panelSuperiorDerecho.setOpaque(false);
-        panelSuperiorDerecho.add(panelBarras, BorderLayout.NORTH);
-        panelSuperiorDerecho.add(panelGrafico, BorderLayout.CENTER);
-
-        // Caja de Logs de Eventos
-        txtLogs = new JTextArea();
-        txtLogs.setEditable(false);
-        txtLogs.setBackground(COLOR_PANEL_INTERNO);
-        txtLogs.setForeground(COLOR_TEXTO_PRINCIPAL);
-        txtLogs.setFont(new Font("Monospaced", Font.PLAIN, 10));
-        txtLogs.setCaretColor(Color.WHITE);
-        JScrollPane scrollLogs = new JScrollPane(txtLogs);
-        scrollLogs.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(COLOR_BORDE), "Registro de Eventos del Sistema (Logs)",
-                TitledBorder.LEFT, TitledBorder.TOP, new Font("SansSerif", Font.BOLD, 10), COLOR_TEXTO_SECUNDARIO));
-
-        panelDerecho.add(panelSuperiorDerecho, BorderLayout.NORTH);
-        panelDerecho.add(scrollLogs, BorderLayout.CENTER);
-
-        return panelDerecho;
-    }
-
-    private JPanel crearPanelBuffersGlobales() {
-        panelBuffersGlobal = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 6));
-        panelBuffersGlobal.setBackground(COLOR_PANEL);
-        panelBuffersGlobal.setBorder(crearBordeTitulado("Buffers Compartidos y Semáforos (Sincronización Productor-Consumidor)"));
-
-        refrescarPanelBuffers();
-        return panelBuffersGlobal;
-    }
-
-    private void refrescarPanelBuffers() {
-        panelBuffersGlobal.removeAll();
-        ListaEnlazada<Buffer> bufs = cluster.getBuffers();
-
-        if (bufs.estaVacia()) {
-            JLabel lblVacio = new JLabel("No hay buffers configurados. Use el botón '+ Crear Buffer' para agregar uno.");
-            lblVacio.setForeground(COLOR_TEXTO_SECUNDARIO);
-            lblVacio.setFont(new Font("SansSerif", Font.ITALIC, 11));
-            panelBuffersGlobal.add(lblVacio);
-        } else {
-            for (int i = 0; i < bufs.getTamano(); i++) {
-                Buffer b = bufs.obtener(i);
-                JPanel tarjetaBuf = new JPanel(new GridLayout(4, 1, 2, 2));
-                tarjetaBuf.setBackground(COLOR_PANEL_INTERNO);
-                tarjetaBuf.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(COLOR_BORDE, 1),
-                        new EmptyBorder(4, 8, 4, 8)
-                ));
-
-                JLabel l1 = new JLabel(b.getId() + " [" + b.getComputadorAnfitrion() + "]");
-                l1.setFont(new Font("SansSerif", Font.BOLD, 11));
-                l1.setForeground(COLOR_VERDE);
-
-                JLabel l2 = new JLabel("Ocupación: " + b.getElementosActuales() + " / " + b.getCapacidad() + " items");
-                l2.setForeground(COLOR_TEXTO_PRINCIPAL);
-                l2.setFont(new Font("Monospaced", Font.PLAIN, 10));
-
-                JLabel l3 = new JLabel("Mutex: " + b.getMutex().getValor() + " | Vacíos: " + b.getVacios().getValor() + " | Llenos: " + b.getLlenos().getValor());
-                l3.setForeground(COLOR_AZUL);
-                l3.setFont(new Font("Monospaced", Font.PLAIN, 10));
-
-                int bloqTotal = b.getMutex().getColaBloqueados().getTamano() + b.getVacios().getColaBloqueados().getTamano() + b.getLlenos().getColaBloqueados().getTamano();
-                JLabel l4 = new JLabel("Procesos en Espera: " + bloqTotal);
-                l4.setForeground(bloqTotal > 0 ? COLOR_NARANJA : COLOR_TEXTO_SECUNDARIO);
-                l4.setFont(new Font("Monospaced", Font.PLAIN, 10));
-
-                tarjetaBuf.add(l1);
-                tarjetaBuf.add(l2);
-                tarjetaBuf.add(l3);
-                tarjetaBuf.add(l4);
-                panelBuffersGlobal.add(tarjetaBuf);
-            }
-        }
-        panelBuffersGlobal.revalidate();
-        panelBuffersGlobal.repaint();
-    }
-
-    private void iniciarTimerRefresco() {
-        timerRefrescoGUI = new javax.swing.Timer(250, e -> refrescarInterfaz());
-        timerRefrescoGUI.start();
-    }
-
-    private void refrescarInterfaz() {
-        int cicloActual = reloj.getCicloActual();
-        lblReloj.setText("Reloj de Simulación: Ciclo " + cicloActual);
-
-        int ramUsadaTotal = 0;
-        int ramCapacidadTotal = 0;
-
-        for (int i = 0; i < cluster.getCantidadComputadores(); i++) {
-            Computador nodo = cluster.getComputador(i);
-            ramUsadaTotal += nodo.getRamUsada();
-            ramCapacidadTotal += nodo.getRamTotal();
-
-            // Barra RAM del nodo
-            JProgressBar barRAM = findComponentByName(this, "barRAM_" + nodo.getNombre(), JProgressBar.class);
-            if (barRAM != null) {
-                barRAM.setValue(nodo.getRamUsada());
-                barRAM.setString("RAM: Usada " + nodo.getRamUsada() + " MB / Libre " + nodo.getRamLibre() + " MB (" +
-                        (int)(((double) nodo.getRamUsada() / nodo.getRamTotal()) * 100) + "%)");
-            }
-
-            // Estado de CPU
-            JLabel lblCPU = findComponentByName(this, "lblCPU_" + nodo.getNombre(), JLabel.class);
-            if (lblCPU != null) {
-                Proceso ejec = nodo.getPlanificador().getProcesoEnEjecucion();
-                if (ejec != null) {
-                    lblCPU.setText("CPU: " + ejec.getNombre() + " | PC: " + ejec.getPc() + " | MAR: " + ejec.getMar() + " | Modo: " + ejec.getModo());
-                    lblCPU.setForeground(COLOR_VERDE);
-                } else {
-                    lblCPU.setText("CPU: [IDLE] | PC: " + nodo.getCpu().getPc() + " | MAR: " + nodo.getCpu().getMar() + " | Modo: SISTEMA_OPERATIVO");
-                    lblCPU.setForeground(COLOR_AZUL);
-                }
-            }
-
-            // Actualizar colas de forma NO destructiva (usando snapshot en ListaEnlazada)
-            actualizarListaGUISegura("lstNuevos_" + nodo.getNombre(), nodo.getColaNuevos().obtenerListaElementos());
-            actualizarListaGUISegura("lstListos_" + nodo.getNombre(), nodo.getPlanificador().getColaListos().obtenerListaElementos());
-            actualizarListaGUISegura("lstBloq_" + nodo.getNombre(), nodo.getPlanificador().getColaBloqueados().obtenerListaElementos());
-            actualizarListaGUISegura("lstTerm_" + nodo.getNombre(), nodo.getPlanificador().getColaTerminados().obtenerListaElementos());
-
-            // Lista CPU
-            JList<ProcesoWrapper> lstCPU = findComponentByName(this, "lstCPU_" + nodo.getNombre(), JList.class);
-            if (lstCPU != null) {
-                DefaultListModel<ProcesoWrapper> model = (DefaultListModel<ProcesoWrapper>) lstCPU.getModel();
-                model.clear();
-                Proceso ejec = nodo.getPlanificador().getProcesoEnEjecucion();
-                if (ejec != null) {
-                    model.addElement(new ProcesoWrapper(ejec, ">> " + ejec.getNombre() + " (PC:" + ejec.getPc() + ", D:" + ejec.getDeadline() + ")"));
-                }
-            }
-        }
-
-        // Refrescar barras globales
-        if (ramCapacidadTotal > 0) {
-            int pctRAM = (int) (((double) ramUsadaTotal / ramCapacidadTotal) * 100);
-            barUsoRAMGlobal.setValue(pctRAM);
-            barUsoRAMGlobal.setString("Ocupación RAM Clúster: " + pctRAM + "%");
-        }
-
-        double usoCPUProm = cluster.getUsoCPUGlobal();
-        barUsoCPUGlobal.setValue((int) usoCPUProm);
-        barUsoCPUGlobal.setString(String.format("Uso CPU Promedio: %.1f%%", usoCPUProm));
-
-        // Registrar muestra en el gráfico en tiempo real
-        panelGrafico.registrarMuestra();
-
-        // Refrescar tarjetas de buffers
-        refrescarPanelBuffers();
-    }
-
-    private void actualizarListaGUISegura(String nombreComponente, ListaEnlazada<Proceso> snapshot) {
-        JList<ProcesoWrapper> lst = findComponentByName(this, nombreComponente, JList.class);
-        if (lst == null) return;
-
-        DefaultListModel<ProcesoWrapper> model = (DefaultListModel<ProcesoWrapper>) lst.getModel();
-        model.clear();
-
-        for (int i = 0; i < snapshot.getTamano(); i++) {
-            Proceso p = snapshot.obtener(i);
-            String etiqueta;
-            if (p.getEstado() == EstadoProceso.BLOQUEADO) {
-                etiqueta = p.getNombre() + " [" + p.getMotivoBloqueo().getDescripcion() + "]";
-            } else if (p.getEstado() == EstadoProceso.TERMINADO) {
-                etiqueta = p.getNombre() + " [Fin: C" + p.getCicloFinalizacion() + "]";
-            } else {
-                etiqueta = p.getNombre() + " (T:" + p.getTiempoRestante() + ", D:" + p.getDeadline() + ")";
-            }
-            model.addElement(new ProcesoWrapper(p, etiqueta));
-        }
-    }
-
-    public void registrarLog(String mensaje) {
-        SwingUtilities.invokeLater(() -> {
-            txtLogs.append("[Ciclo " + reloj.getCicloActual() + "] " + mensaje + "\n");
-            txtLogs.setCaretPosition(txtLogs.getDocument().getLength());
-        });
-    }
-
-    // Clase auxiliar para encapsular proceso y mostrar texto en JList permitiendo abrir PCB
-    private static class ProcesoWrapper {
-        public Proceso proceso;
-        public String texto;
-
-        public ProcesoWrapper(Proceso proceso, String texto) {
-            this.proceso = proceso;
-            this.texto = texto;
+    // =========================================================================
+    // PANEL INTERNO: MAPA VISUAL DE BLOQUES DEL DISCO
+    // =========================================================================
+    private class PanelMapaDisco extends JPanel {
+        public PanelMapaDisco() {
+            setBackground(new Color(16, 19, 27));
+            setPreferredSize(new Dimension(560, 240));
         }
 
         @Override
-        public String toString() {
-            return texto;
-        }
-    }
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            DiscoSimulado disco = sistema.getDisco();
+            if (disco == null) return;
 
-    private JLabel crearLabel(String texto) {
-        JLabel label = new JLabel(texto);
-        label.setForeground(COLOR_TEXTO_PRINCIPAL);
-        label.setFont(new Font("SansSerif", Font.BOLD, 11));
-        return label;
-    }
+            int total = disco.getTotalBloques();
+            int cols = 20;
+            int rows = (int) Math.ceil((double) total / cols);
 
-    private JTextField crearTextField(String textoInicial, int columnas) {
-        JTextField tf = new JTextField(textoInicial, columnas);
-        tf.setBackground(COLOR_PANEL_INTERNO);
-        tf.setForeground(COLOR_TEXTO_PRINCIPAL);
-        tf.setCaretColor(Color.WHITE);
-        tf.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(COLOR_BORDE),
-                BorderFactory.createEmptyBorder(2, 4, 2, 4)
-        ));
-        return tf;
-    }
+            int pad = 8;
+            int cellW = Math.max(16, (getWidth() - pad * 2) / cols);
+            int cellH = Math.max(16, (getHeight() - pad * 2) / Math.max(1, rows));
 
-    private void estilarBoton(JButton b, Color fondo) {
-        b.setBackground(fondo);
-        b.setForeground(Color.WHITE);
-        b.setFont(new Font("SansSerif", Font.BOLD, 11));
-        b.setFocusPainted(false);
-    }
+            g.setFont(new Font("Consolas", Font.PLAIN, 9));
 
-    private JProgressBar crearBarraProgresiva(String titulo, Color color) {
-        JProgressBar pb = new JProgressBar(0, 100);
-        pb.setValue(0);
-        pb.setStringPainted(true);
-        pb.setString(titulo + ": 0%");
-        pb.setForeground(color);
-        pb.setBackground(COLOR_PANEL_INTERNO);
-        return pb;
-    }
+            for (int i = 0; i < total; i++) {
+                Bloque b = disco.getBloque(i);
+                int r = i / cols;
+                int c = i % cols;
+                int x = pad + c * cellW;
+                int y = pad + r * cellH;
 
-    private TitledBorder crearBordeTitulado(String titulo) {
-        return BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(COLOR_BORDE, 1),
-                titulo, TitledBorder.LEFT, TitledBorder.TOP,
-                new Font("SansSerif", Font.BOLD, 12), COLOR_TEXTO_PRINCIPAL);
-    }
+                if (b.isOcupado()) {
+                    g.setColor(b.getColorArchivo() != null ? b.getColorArchivo() : Color.CYAN);
+                } else if (b.isEsAreaSwap()) {
+                    g.setColor(new Color(55, 38, 72)); // Área Swap libre
+                } else {
+                    g.setColor(new Color(38, 44, 58)); // Bloque archivo libre
+                }
+                g.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
 
-    @SuppressWarnings("unchecked")
-    private <T extends Component> T findComponentByName(Container container, String name, Class<T> type) {
-        for (Component c : container.getComponents()) {
-            if (name.equals(c.getName()) && type.isInstance(c)) {
-                return (T) c;
-            }
-            if (c instanceof Container) {
-                T found = findComponentByName((Container) c, name, type);
-                if (found != null) return found;
+                // Resaltar posición actual del cabezal
+                if (i == disco.getCabezalActual()) {
+                    g.setColor(Color.YELLOW);
+                    ((Graphics2D) g).setStroke(new BasicStroke(2f));
+                    g.drawRect(x + 1, y + 1, cellW - 2, cellH - 2);
+                }
+
+                g.setColor(b.isOcupado() ? Color.BLACK : Color.LIGHT_GRAY);
+                g.drawString(String.valueOf(i), x + 3, y + cellH - 4);
             }
         }
-        return null;
     }
 }
