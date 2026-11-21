@@ -203,7 +203,7 @@ public class VentanaSimulador extends JFrame {
         JScrollPane spColaIO = new JScrollPane(lstColaIO);
         spColaIO.setPreferredSize(new Dimension(200, 95));
         spColaIO.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(Color.GRAY), " Cola de Solicitudes E/S ", 0, 0, null, Color.LIGHT_GRAY));
+                BorderFactory.createLineBorder(Color.GRAY), " Cola de Solicitudes E/S ", 0, 0, null, Color.BLACK));
         pnlDiscoTop.add(spColaIO, BorderLayout.SOUTH);
 
         pnlCentro.add(pnlDiscoTop, BorderLayout.CENTER);
@@ -216,6 +216,24 @@ public class VentanaSimulador extends JFrame {
         };
         tablaAsignacion = new JTable(modeloTablaAsignacion);
         tablaAsignacion.setRowHeight(22);
+        tablaAsignacion.setBackground(new Color(18, 21, 29));
+        tablaAsignacion.setForeground(Color.WHITE);
+        tablaAsignacion.setGridColor(new Color(40, 46, 62));
+        tablaAsignacion.getTableHeader().setBackground(new Color(28, 33, 45));
+        tablaAsignacion.getTableHeader().setForeground(Color.WHITE);
+        tablaAsignacion.getTableHeader().setDefaultRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                           boolean hasFocus, int row, int column) {
+                JLabel lbl = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                lbl.setBackground(new Color(28, 33, 45));
+                lbl.setForeground(Color.WHITE);
+                lbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                lbl.setHorizontalAlignment(SwingConstants.CENTER);
+                lbl.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 1, new Color(50, 58, 75)));
+                return lbl;
+            }
+        });
         tablaAsignacion.getColumnModel().getColumn(0).setMaxWidth(50);
         tablaAsignacion.getColumnModel().getColumn(0).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
@@ -231,10 +249,11 @@ public class VentanaSimulador extends JFrame {
         });
 
         JScrollPane spTabla = new JScrollPane(tablaAsignacion);
+        spTabla.getViewport().setBackground(new Color(18, 21, 29));
         spTabla.setPreferredSize(new Dimension(400, 210));
         spTabla.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createLineBorder(new Color(0, 200, 115)),
-                " Tabla de Asignación de Archivos (Encadenada) ", 0, 0, null, Color.WHITE));
+                " Tabla de Asignación de Archivos (Encadenada) ", 0, 0, null, Color.BLACK));
         pnlCentro.add(spTabla, BorderLayout.SOUTH);
 
         // --- COLUMNA 3: COMPUTADOR ÚNICO (7 ESTADOS) Y GRÁFICO ---
