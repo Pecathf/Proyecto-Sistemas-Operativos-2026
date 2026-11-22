@@ -20,7 +20,7 @@ public class DialogoMetricas extends JDialog {
 
     public DialogoMetricas(Frame owner, Cluster sistema) {
         super(owner, "Métricas Globales de Rendimiento (CPU, Memoria, Disco y Swap)", true);
-        setSize(580, 520);
+        setSize(600, 560);
         setLocationRelativeTo(owner);
 
         Computador comp = sistema.getComputadorUnico();
@@ -49,7 +49,7 @@ public class DialogoMetricas extends JDialog {
         int ciclosTotales = Math.max(1, sistema.getReloj().getCicloActual());
         double throughput = (double) terminados / ciclosTotales;
 
-        JPanel root = new JPanel(new GridLayout(13, 2, 10, 7));
+        JPanel root = new JPanel(new GridLayout(15, 2, 10, 7));
         root.setBackground(new Color(24, 28, 38));
         root.setBorder(new EmptyBorder(18, 22, 18, 22));
 

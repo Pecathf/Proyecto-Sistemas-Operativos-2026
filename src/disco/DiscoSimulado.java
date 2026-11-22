@@ -39,6 +39,7 @@ public class DiscoSimulado implements ComponenteReloj {
     private Computador computador;
     private RegistroEventos logger;
     private Semaphore mutexDisco;
+    private CacheBloques cache;
 
     // Métricas del Disco
     private int desplazamientoTotal;
@@ -74,6 +75,7 @@ public class DiscoSimulado implements ComponenteReloj {
         this.desplazamientoTotal = 0;
         this.totalSolicitudesAtendidas = 0;
         this.sumaTiemposEsperaIO = 0;
+        this.cache = new CacheBloques(16);
     }
 
     public void setComputador(Computador computador) {
@@ -316,6 +318,7 @@ public class DiscoSimulado implements ComponenteReloj {
         int seguridad = 0;
         while (actual >= 0 && actual < inicioAreaSwap && seguridad < totalBloques) {
             int siguiente = bloques[actual].getSiguienteBloque();
+            if (cache != null) { cache.invalidarBloque(actual); }
             bloques[actual].liberar();
             actual = siguiente;
             seguridad++;
@@ -370,6 +373,7 @@ public class DiscoSimulado implements ComponenteReloj {
     public int getTamanoSwapBloques() { return tamanoSwapBloques; }
     public int getInicioAreaSwap() { return inicioAreaSwap; }
     public Bloque getBloque(int index) { return (index >= 0 && index < totalBloques) ? bloques[index] : null; }
+    public CacheBloques getCache() { return cache; }
     public int getCabezalActual() { return cabezalActual; }
     public synchronized void setCabezalActual(int nuevaPosicion) { this.cabezalActual = Math.max(0, Math.min(nuevaPosicion, this.totalBloques - 1)); }
     public boolean isDireccionSubiendo() { return direccionSubiendo[0]; }
