@@ -145,7 +145,7 @@ public class GestorJSON {
         }
 
         res.ramCapacity = Math.max(64, extraerInt(contenido, "ramCapacity", 1024));
-        res.quantum = Math.max(1, extraerInt(contenido, "quantum", 3));
+        res.quantum = Math.max(0, extraerInt(contenido, "quantum", 3));
 
         String cpuPolStr = extraerString(contenido, "policy", "FCFS").toUpperCase().replace(" ", "_");
         try {

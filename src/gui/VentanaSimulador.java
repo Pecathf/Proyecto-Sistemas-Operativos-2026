@@ -39,6 +39,7 @@ public class VentanaSimulador extends JFrame {
     private JComboBox<TipoPolitica> cmbPoliticaCPU;
     private JComboBox<TipoPoliticaDisco> cmbPoliticaDisco;
     private JSlider sldVelocidad;
+    private JButton btnNuevoProcCPU;
 
     // Panel Izquierdo: JTree y Detalles del Nodo
     private JTree arbolFS;
@@ -110,7 +111,7 @@ public class VentanaSimulador extends JFrame {
         sldVelocidad.setPreferredSize(new Dimension(110, 24));
         sldVelocidad.setOpaque(false);
 
-        JButton btnNuevoProcCPU = new JButton("+ Proceso CPU");
+        btnNuevoProcCPU = new JButton("+ Proceso CPU");
         JButton btnGuardarJSON = new JButton("Guardar JSON FS");
         JButton btnMetricas = new JButton("Métricas");
 

@@ -29,6 +29,8 @@ public class VentanaConfiguracionInicial extends JFrame {
     private JSpinner spnDuracionCiclo;
     private JSpinner spnMemoriaRAM;
     private JSpinner spnQuantum;
+    private JSpinner spnTotalBloques;
+    private JSpinner spnCabezalInicial;
     private JSpinner spnSwapBloques;
     private JComboBox<TipoPolitica> cmbPoliticaCPU;
     private JComboBox<TipoPoliticaDisco> cmbPoliticaDisco;
@@ -39,7 +41,7 @@ public class VentanaConfiguracionInicial extends JFrame {
     public VentanaConfiguracionInicial() {
         setTitle("ÁvilaOS 2.0 - Configuración Inicial del Sistema");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(680, 520);
+        setSize(700, 600);
         setLocationRelativeTo(null);
         setResizable(false);
 
@@ -97,7 +99,7 @@ public class VentanaConfiguracionInicial extends JFrame {
 
         spnDuracionCiclo = new JSpinner(new SpinnerNumberModel(300, 20, 5000, 50));
         spnMemoriaRAM = new JSpinner(new SpinnerNumberModel(1024, 64, 16384, 64));
-        spnQuantum = new JSpinner(new SpinnerNumberModel(3, 1, 20, 1));
+        spnQuantum = new JSpinner(new SpinnerNumberModel(3, 0, 20, 1));
         spnSwapBloques = new JSpinner(new SpinnerNumberModel(50, 10, 500, 10));
         cmbPoliticaCPU = new JComboBox<>(TipoPolitica.values());
         cmbPoliticaDisco = new JComboBox<>(TipoPoliticaDisco.values());

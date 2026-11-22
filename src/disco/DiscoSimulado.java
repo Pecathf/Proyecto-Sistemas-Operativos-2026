@@ -371,6 +371,7 @@ public class DiscoSimulado implements ComponenteReloj {
     public int getInicioAreaSwap() { return inicioAreaSwap; }
     public Bloque getBloque(int index) { return (index >= 0 && index < totalBloques) ? bloques[index] : null; }
     public int getCabezalActual() { return cabezalActual; }
+    public synchronized void setCabezalActual(int nuevaPosicion) { this.cabezalActual = Math.max(0, Math.min(nuevaPosicion, this.totalBloques - 1)); }
     public boolean isDireccionSubiendo() { return direccionSubiendo[0]; }
     public SolicitudIO getSolicitudEnCurso() { return solicitudEnCurso; }
 
