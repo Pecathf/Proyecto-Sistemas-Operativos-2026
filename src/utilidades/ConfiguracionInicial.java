@@ -13,7 +13,7 @@ import edd.ListaEnlazada;
 import politicas.TipoPolitica;
 import procesos.Proceso;
 import procesos.TipoProceso;
-import sincronizacion.Buffer;
+import sincronizacion.buffer;
 
 public class ConfiguracionInicial {
     public int duracionCicloMs;
@@ -23,7 +23,7 @@ public class ConfiguracionInicial {
     public int latenciaRedCiclos;
 
     public ListaEnlazada<ConfigComputador> computadores;
-    public ListaEnlazada<Buffer> buffersIniciales;
+    public ListaEnlazada<buffer> buffersIniciales;
     public ListaEnlazada<Proceso> procesosIniciales;
 
     public ConfiguracionInicial() {
@@ -48,7 +48,7 @@ public class ConfiguracionInicial {
         config.computadores.agregar(new ConfigComputador("Computador 1", 8192, TipoPolitica.ROUND_ROBIN, 3));
         config.computadores.agregar(new ConfigComputador("Computador 2", 16384, TipoPolitica.ROUND_ROBIN, 3));
 
-        Buffer b1 = new Buffer("Buffer_1", 5, "Computador 1", 512);
+        buffer b1 = new buffer("Buffer_1", 5, "Computador 1", 512);
         config.buffersIniciales.agregar(b1);
 
         Proceso p1 = new Proceso(1, "Proceso_CPU_1", 8, 1, 1024, 16, TipoProceso.CPU_BOUND);
@@ -89,6 +89,6 @@ public class ConfiguracionInicial {
     public void setLatenciaRedCiclos(int latenciaRedCiclos) { this.latenciaRedCiclos = latenciaRedCiclos; }
 
     public ListaEnlazada<ConfigComputador> getComputadores() { return computadores; }
-    public ListaEnlazada<Buffer> getBuffersIniciales() { return buffersIniciales; }
+    public ListaEnlazada<buffer> getBuffersIniciales() { return buffersIniciales; }
     public ListaEnlazada<Proceso> getProcesosIniciales() { return procesosIniciales; }
 }
