@@ -12,7 +12,7 @@ import edd.ListaEnlazada;
 import politicas.TipoPolitica;
 import procesos.Proceso;
 import procesos.TipoProceso;
-import sincronizacion.Buffer;
+import sincronizacion.buffer;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -50,7 +50,7 @@ public class GestorArchivos {
             pw.println("id,capacidad,computadorAnfitrion,ramMb");
             if (config.buffersIniciales != null) {
                 for (int i = 0; i < config.buffersIniciales.getTamano(); i++) {
-                    Buffer b = config.buffersIniciales.obtener(i);
+                    buffer b = config.buffersIniciales.obtener(i);
                     if (b != null) {
                         pw.println(b.getId() + "," + b.getCapacidad() + "," + b.getComputadorAnfitrion() + "," + b.getMemoriaOcupadaMb());
                     }
@@ -152,7 +152,7 @@ public class GestorArchivos {
                                 int cap = Integer.parseInt(partes[1].trim());
                                 String anf = partes[2].trim();
                                 int ramMb = (partes.length >= 4) ? Integer.parseInt(partes[3].trim()) : cap * 64;
-                                config.buffersIniciales.agregar(new Buffer(id, cap, anf, ramMb));
+                                config.buffersIniciales.agregar(new buffer(id, cap, anf, ramMb));
                             }
                             break;
 

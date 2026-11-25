@@ -8,10 +8,9 @@ package sincronizacion;
  *
  * @author PECA
  */
-
 import edd.ListaEnlazada;
 
-public class Buffer {
+public class buffer {
     private String id;
     private int capacidad;
     private int memoriaOcupadaMb;
@@ -26,7 +25,7 @@ public class Buffer {
     private int totalProducidos;
     private int totalConsumidos;
 
-    public Buffer(String id, int capacidad, String computadorAnfitrion, int memoriaOcupadaMb) {
+    public buffer(String id, int capacidad, String computadorAnfitrion, int memoriaOcupadaMb) {
         this.id = id;
         this.capacidad = capacidad;
         this.computadorAnfitrion = computadorAnfitrion;
@@ -41,7 +40,7 @@ public class Buffer {
         this.totalConsumidos = 0;
     }
 
-    public Buffer(String id, int capacidad, String computadorAnfitrion) {
+    public buffer(String id, int capacidad, String computadorAnfitrion) {
         this(id, capacidad, computadorAnfitrion, capacidad * 64);
     }
 
