@@ -16,7 +16,8 @@ public class PoliticaPrioridadApropiativa implements PoliticaPlanificacion {
 
     @Override
     public Proceso seleccionarSiguienteProceso(Cola<Proceso> colaListos) {
-        if (colaListos.estaVacia()) return null;
+        if (colaListos.estaVacia())
+            return null;
 
         Cola<Proceso> auxiliar = new Cola<>();
         Proceso mayorPrioridad = colaListos.desencolar();
@@ -50,8 +51,9 @@ public class PoliticaPrioridadApropiativa implements PoliticaPlanificacion {
 
     @Override
     public boolean debeApropiar(Proceso enEjecucion, Cola<Proceso> colaListos) {
-        if (enEjecucion == null || colaListos.estaVacia()) return false;
-        
+        if (enEjecucion == null || colaListos.estaVacia())
+            return false;
+
         ListaEnlazada<Proceso> lista = colaListos.obtenerListaElementos();
         for (int i = 0; i < lista.getTamano(); i++) {
             Proceso p = lista.obtener(i);

@@ -20,7 +20,8 @@ public class DialogoMetricas extends JDialog {
 
     public DialogoMetricas(Frame owner, Cluster sistema) {
         super(owner, "Métricas Globales de Rendimiento (CPU, Memoria, Disco y Swap)", true);
-        setSize(600, 560);
+        setSize(700, 560);
+        setMinimumSize(new Dimension(540, 420));
         setLocationRelativeTo(owner);
 
         Computador comp = sistema.getComputadorUnico();
@@ -49,7 +50,7 @@ public class DialogoMetricas extends JDialog {
         int ciclosTotales = Math.max(1, sistema.getReloj().getCicloActual());
         double throughput = (double) terminados / ciclosTotales;
 
-        JPanel root = new JPanel(new GridLayout(15, 2, 10, 7));
+        JPanel root = new JPanel(new GridLayout(0, 2, 10, 7));
         root.setBackground(new Color(24, 28, 38));
         root.setBorder(new EmptyBorder(18, 22, 18, 22));
 
@@ -80,15 +81,18 @@ public class DialogoMetricas extends JDialog {
                 comp.getMemoriaUsada() + "/" + comp.getMemoriaTotal() + " MB | Swap libres: " +
                 disco.contarBloquesLibresSwap() + "/" + disco.getTamanoSwapBloques());
 
-        setContentPane(root);
+        JScrollPane spRoot = new JScrollPane(root);
+        spRoot.setBorder(BorderFactory.createEmptyBorder());
+        spRoot.getViewport().setBackground(new Color(24, 28, 38));
+        setContentPane(spRoot);
     }
 
     private void agregarFila(JPanel panel, String clave, String valor) {
-        JLabel l1 = new JLabel(clave);
+        JLabel l1 = new JLabel("<html>" + clave + "</html>");
         l1.setForeground(new Color(165, 180, 200));
         l1.setFont(new Font("Segoe UI", Font.BOLD, 12));
 
-        JLabel l2 = new JLabel(valor);
+        JLabel l2 = new JLabel("<html>" + valor + "</html>");
         l2.setForeground(new Color(0, 229, 255));
         l2.setFont(new Font("Segoe UI", Font.PLAIN, 12));
 

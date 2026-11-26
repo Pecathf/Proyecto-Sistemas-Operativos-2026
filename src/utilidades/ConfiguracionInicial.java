@@ -1,14 +1,9 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package utilidades;
 
 /**
  *
  * @author PECA
  */
-
 import edd.ListaEnlazada;
 import politicas.TipoPolitica;
 import procesos.Proceso;
@@ -17,10 +12,12 @@ import sincronizacion.Buffer;
 
 public class ConfiguracionInicial {
     public int duracionCicloMs;
+    public int latenciaRedCiclos;
+
+    // Campos auxiliares usados por LectorCSV / GestorArchivos para carga simple
     public int numComputadores;
     public int ramPorComputador;
     public int quantumPorDefecto;
-    public int latenciaRedCiclos;
 
     public ListaEnlazada<ConfigComputador> computadores;
     public ListaEnlazada<Buffer> buffersIniciales;
@@ -28,10 +25,10 @@ public class ConfiguracionInicial {
 
     public ConfiguracionInicial() {
         this.duracionCicloMs = 1000;
+        this.latenciaRedCiclos = 2;
         this.numComputadores = 2;
         this.ramPorComputador = 8192;
         this.quantumPorDefecto = 3;
-        this.latenciaRedCiclos = 2;
         this.computadores = new ListaEnlazada<>();
         this.buffersIniciales = new ListaEnlazada<>();
         this.procesosIniciales = new ListaEnlazada<>();
@@ -40,9 +37,6 @@ public class ConfiguracionInicial {
     public static ConfiguracionInicial crearConfiguracionPorDefecto() {
         ConfiguracionInicial config = new ConfiguracionInicial();
         config.duracionCicloMs = 1000;
-        config.numComputadores = 2;
-        config.ramPorComputador = 8192;
-        config.quantumPorDefecto = 3;
         config.latenciaRedCiclos = 2;
 
         config.computadores.agregar(new ConfigComputador("Computador 1", 8192, TipoPolitica.ROUND_ROBIN, 3));
@@ -72,23 +66,4 @@ public class ConfiguracionInicial {
 
         return config;
     }
-
-    public int getDuracionCicloMs() { return duracionCicloMs; }
-    public void setDuracionCicloMs(int duracionCicloMs) { this.duracionCicloMs = duracionCicloMs; }
-
-    public int getNumComputadores() { return numComputadores; }
-    public void setNumComputadores(int numComputadores) { this.numComputadores = numComputadores; }
-
-    public int getRamPorComputador() { return ramPorComputador; }
-    public void setRamPorComputador(int ramPorComputador) { this.ramPorComputador = ramPorComputador; }
-
-    public int getQuantumPorDefecto() { return quantumPorDefecto; }
-    public void setQuantumPorDefecto(int quantumPorDefecto) { this.quantumPorDefecto = quantumPorDefecto; }
-
-    public int getLatenciaRedCiclos() { return latenciaRedCiclos; }
-    public void setLatenciaRedCiclos(int latenciaRedCiclos) { this.latenciaRedCiclos = latenciaRedCiclos; }
-
-    public ListaEnlazada<ConfigComputador> getComputadores() { return computadores; }
-    public ListaEnlazada<Buffer> getBuffersIniciales() { return buffersIniciales; }
-    public ListaEnlazada<Proceso> getProcesosIniciales() { return procesosIniciales; }
 }

@@ -15,7 +15,8 @@ public class DialogoPCB extends JDialog {
 
     public DialogoPCB(Frame owner, Proceso p) {
         super(owner, "Inspector de PCB - " + p.getNombre(), true);
-        setSize(440, 440);
+        setSize(520, 460);
+        setMinimumSize(new Dimension(420, 360));
         setLocationRelativeTo(owner);
 
         JPanel panel = new JPanel(new GridLayout(14, 2, 8, 6));
@@ -37,15 +38,18 @@ public class DialogoPCB extends JDialog {
         agregarCampo(panel, "Tiempo Espera Listo:", p.getTiempoEsperaListo() + " ciclos");
         agregarCampo(panel, "Tiempo Bloqueado:", p.getTiempoBloqueado() + " ciclos");
 
-        setContentPane(panel);
+        JScrollPane spPanel = new JScrollPane(panel);
+        spPanel.setBorder(BorderFactory.createEmptyBorder());
+        spPanel.getViewport().setBackground(new Color(26, 30, 40));
+        setContentPane(spPanel);
     }
 
     private void agregarCampo(JPanel panel, String etiqueta, String valor) {
-        JLabel lbl1 = new JLabel(etiqueta);
+        JLabel lbl1 = new JLabel("<html>" + etiqueta + "</html>");
         lbl1.setForeground(new Color(160, 175, 195));
         lbl1.setFont(new Font("Segoe UI", Font.BOLD, 12));
 
-        JLabel lbl2 = new JLabel(valor);
+        JLabel lbl2 = new JLabel("<html>" + valor + "</html>");
         lbl2.setForeground(Color.WHITE);
         lbl2.setFont(new Font("Segoe UI", Font.PLAIN, 12));
 

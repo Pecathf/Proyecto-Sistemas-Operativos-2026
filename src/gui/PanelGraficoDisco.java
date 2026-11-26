@@ -13,7 +13,8 @@ public class PanelGraficoDisco extends JPanel {
     public PanelGraficoDisco() {
         this.historialDesplazamiento = new ListaEnlazada<>();
         setBackground(new Color(20, 24, 33));
-        setPreferredSize(new Dimension(380, 170));
+        setPreferredSize(new Dimension(340, 145));
+        setMinimumSize(new Dimension(200, 110));
     }
 
     public void registrarPunto(int desplazamientoAcumulado) {
@@ -32,11 +33,21 @@ public class PanelGraficoDisco extends JPanel {
 
         int w = getWidth();
         int h = getHeight();
+        if (w < 80 || h < 60) return;
         int pad = 28;
 
         g2.setColor(new Color(0, 229, 255));
-        g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        g2.drawString("Desplazamiento Acumulado del Cabezal vs Tiempo", pad, 18);
+        Font tituloFont = new Font("Segoe UI", Font.BOLD, 12);
+        g2.setFont(tituloFont);
+        String titulo = "Desplazamiento Acumulado del Cabezal vs Tiempo";
+        if (g2.getFontMetrics().stringWidth(titulo) > w - pad - 8) {
+            tituloFont = new Font("Segoe UI", Font.BOLD, 10);
+            g2.setFont(tituloFont);
+            if (g2.getFontMetrics().stringWidth(titulo) > w - pad - 8) {
+                titulo = "Desplazamiento Cabezal vs Tiempo";
+            }
+        }
+        g2.drawString(titulo, pad, 18);
 
         g2.setColor(new Color(70, 80, 100));
         g2.drawLine(pad, h - pad, w - 12, h - pad);

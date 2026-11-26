@@ -41,9 +41,10 @@ public class VentanaConfiguracionInicial extends JFrame {
     public VentanaConfiguracionInicial() {
         setTitle("ÁvilaOS 2.0 - Configuración Inicial del Sistema");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(700, 600);
+        setSize(740, 580);
+        setMinimumSize(new Dimension(660, 520));
         setLocationRelativeTo(null);
-        setResizable(false);
+        setResizable(true);
 
         construirUI();
     }
@@ -78,11 +79,11 @@ public class VentanaConfiguracionInicial extends JFrame {
         lblArchivoProcesos = new JLabel("No seleccionado (Obligatorio)");
         lblArchivoProcesos.setForeground(new Color(255, 110, 110));
 
-        pnlJSON.add(new JLabel("  Estado Disco y Archivos:") {{ setForeground(Color.LIGHT_GRAY); }});
+        pnlJSON.add(new JLabel("  Estado Disco y Archivos:") {{ setForeground(Color.WHITE); }});
         pnlJSON.add(btnCargarFS);
         pnlJSON.add(lblArchivoFS);
 
-        pnlJSON.add(new JLabel("  Configuración y Procesos:") {{ setForeground(Color.LIGHT_GRAY); }});
+        pnlJSON.add(new JLabel("  Configuración y Procesos:") {{ setForeground(Color.WHITE); }});
         pnlJSON.add(btnCargarProc);
         pnlJSON.add(lblArchivoProcesos);
 
@@ -137,7 +138,7 @@ public class VentanaConfiguracionInicial extends JFrame {
 
     private void agregarFilaParam(JPanel panel, String texto, JComponent comp) {
         JLabel lbl = new JLabel("  " + texto);
-        lbl.setForeground(Color.LIGHT_GRAY);
+        lbl.setForeground(Color.WHITE);
         panel.add(lbl);
         panel.add(comp);
     }

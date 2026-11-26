@@ -22,12 +22,17 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.io.File;
 
 public class VentanaSimulador extends JFrame {
+
+    private static final Color COLOR_TITULO_PANEL = new Color(35, 40, 50);
 
     private Cluster sistema;
 
@@ -48,7 +53,7 @@ public class VentanaSimulador extends JFrame {
 
     // Panel Central: Disco Visual, Cabezal, Cola E/S y Tabla Asignación
     private PanelMapaDisco panelMapaDisco;
-    private JLabel lblInfoCabezal;
+    private JTextArea lblInfoCabezal;
     private DefaultListModel<String> modeloColaIO;
     private JTable tablaAsignacion;
     private DefaultTableModel modeloTablaAsignacion;
@@ -72,6 +77,7 @@ public class VentanaSimulador extends JFrame {
         setTitle("ÁvilaOS 2.0 - Simulador de Sistema de Archivos, Disco y Memoria Virtual");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1380, 840);
+        setMinimumSize(new Dimension(760, 560));
         setLocationRelativeTo(null);
 
         construirInterfaz();
@@ -87,7 +93,7 @@ public class VentanaSimulador extends JFrame {
         // =====================================================================
         // BARRA SUPERIOR DE CONTROL
         // =====================================================================
-        JPanel barraTop = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+        JPanel barraTop = new JPanel(new WrapLayout(FlowLayout.LEFT, 10, 6));
         barraTop.setBackground(new Color(28, 33, 45));
 
         lblCiclo = new JLabel("Ciclo: 0");
@@ -130,20 +136,37 @@ public class VentanaSimulador extends JFrame {
         barraTop.add(btnGuardarJSON);
         barraTop.add(btnMetricas);
 
+        barraTop.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (barraTop.getPreferredSize().height != barraTop.getHeight()) {
+                    SwingUtilities.invokeLater(() -> {
+                        barraTop.revalidate();
+                        root.revalidate();
+                    });
+                }
+            }
+        });
+
         root.add(barraTop, BorderLayout.NORTH);
 
         // =====================================================================
         // PANEL CENTRAL DIVIDIDO EN 3 COLUMNAS
         // =====================================================================
         JSplitPane splitIzqCentro = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitIzqCentro.setDividerLocation(310);
+        splitIzqCentro.setDividerLocation(295);
+        splitIzqCentro.setResizeWeight(0.20);
+        splitIzqCentro.setContinuousLayout(true);
 
         JSplitPane splitCentroDer = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitCentroDer.setDividerLocation(640);
+        splitCentroDer.setDividerLocation(620);
+        splitCentroDer.setResizeWeight(0.56);
+        splitCentroDer.setContinuousLayout(true);
 
         // --- COLUMNA 1: ÁRBOL DE ARCHIVOS Y OPERACIONES CRUD ---
         JPanel pnlIzq = new JPanel(new BorderLayout(6, 6));
         pnlIzq.setBackground(new Color(24, 28, 38));
+        pnlIzq.setMinimumSize(new Dimension(200, 200));
         pnlIzq.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createLineBorder(new Color(0, 180, 216)),
                 " Sistema de Archivos Jerárquico ", 0, 0, null, Color.WHITE));
@@ -152,6 +175,12 @@ public class VentanaSimulador extends JFrame {
         arbolFS = new JTree(modeloArbol);
         arbolFS.setBackground(new Color(30, 35, 48));
         arbolFS.setForeground(Color.WHITE);
+        DefaultTreeCellRenderer treeRenderer = new DefaultTreeCellRenderer();
+        treeRenderer.setBackgroundNonSelectionColor(new Color(30, 35, 48));
+        treeRenderer.setTextNonSelectionColor(Color.WHITE);
+        treeRenderer.setBackgroundSelectionColor(new Color(0, 120, 180));
+        treeRenderer.setTextSelectionColor(Color.WHITE);
+        arbolFS.setCellRenderer(treeRenderer);
         pnlIzq.add(new JScrollPane(arbolFS), BorderLayout.CENTER);
 
         JPanel pnlCRUD = new JPanel(new BorderLayout(4, 4));
@@ -170,6 +199,8 @@ public class VentanaSimulador extends JFrame {
 
         txtDetalleNodo = new JTextArea(5, 20);
         txtDetalleNodo.setEditable(false);
+        txtDetalleNodo.setLineWrap(true);
+        txtDetalleNodo.setWrapStyleWord(true);
         txtDetalleNodo.setBackground(new Color(18, 21, 29));
         txtDetalleNodo.setForeground(new Color(165, 215, 255));
         txtDetalleNodo.setFont(new Font("Consolas", Font.PLAIN, 11));
@@ -181,6 +212,7 @@ public class VentanaSimulador extends JFrame {
         // --- COLUMNA 2: DISCO SIMULADO Y TABLA DE ASIGNACIÓN ---
         JPanel pnlCentro = new JPanel(new BorderLayout(6, 6));
         pnlCentro.setBackground(new Color(24, 28, 38));
+        pnlCentro.setMinimumSize(new Dimension(280, 200));
 
         JPanel pnlDiscoTop = new JPanel(new BorderLayout(4, 4));
         pnlDiscoTop.setBackground(new Color(24, 28, 38));
@@ -188,13 +220,37 @@ public class VentanaSimulador extends JFrame {
                 BorderFactory.createLineBorder(new Color(255, 171, 0)),
                 " Mapa Visual de Bloques del Disco y Swap ", 0, 0, null, Color.WHITE));
 
-        lblInfoCabezal = new JLabel("Cabezal: 0 | Dirección: ↑ | Desplazamiento Total: 0");
+        lblInfoCabezal = new JTextArea("Cabezal: 0 | Dirección: ↑ | Desplazamiento Total: 0") {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension d = super.getPreferredSize();
+                return new Dimension(100, d.height);
+            }
+        };
+        lblInfoCabezal.setEditable(false);
+        lblInfoCabezal.setFocusable(false);
+        lblInfoCabezal.setOpaque(false);
+        lblInfoCabezal.setBorder(null);
+        lblInfoCabezal.setLineWrap(true);
+        lblInfoCabezal.setWrapStyleWord(true);
         lblInfoCabezal.setForeground(new Color(255, 214, 0));
         lblInfoCabezal.setFont(new Font("Segoe UI", Font.BOLD, 12));
         pnlDiscoTop.add(lblInfoCabezal, BorderLayout.NORTH);
 
+        pnlDiscoTop.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                SwingUtilities.invokeLater(pnlDiscoTop::revalidate);
+            }
+        });
+
         panelMapaDisco = new PanelMapaDisco();
-        pnlDiscoTop.add(panelMapaDisco, BorderLayout.CENTER);
+        JScrollPane spMapaDisco = new JScrollPane(panelMapaDisco);
+        spMapaDisco.setBorder(BorderFactory.createEmptyBorder());
+        spMapaDisco.getViewport().setBackground(new Color(16, 19, 27));
+        spMapaDisco.getVerticalScrollBar().setUnitIncrement(16);
+        spMapaDisco.getHorizontalScrollBar().setUnitIncrement(16);
+        pnlDiscoTop.add(spMapaDisco, BorderLayout.CENTER);
 
         // Cola de Solicitudes E/S
         modeloColaIO = new DefaultListModel<>();
@@ -202,9 +258,10 @@ public class VentanaSimulador extends JFrame {
         lstColaIO.setBackground(new Color(18, 21, 29));
         lstColaIO.setForeground(new Color(255, 200, 120));
         JScrollPane spColaIO = new JScrollPane(lstColaIO);
-        spColaIO.setPreferredSize(new Dimension(200, 95));
+        spColaIO.setPreferredSize(new Dimension(200, 82));
         spColaIO.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(Color.GRAY), " Cola de Solicitudes E/S ", 0, 0, null, Color.BLACK));
+                BorderFactory.createLineBorder(new Color(100, 110, 130)), " Cola de Solicitudes E/S ", 0, 0,
+                new Font("Segoe UI", Font.BOLD, 11), COLOR_TITULO_PANEL));
         pnlDiscoTop.add(spColaIO, BorderLayout.SOUTH);
 
         pnlCentro.add(pnlDiscoTop, BorderLayout.CENTER);
@@ -215,7 +272,12 @@ public class VentanaSimulador extends JFrame {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
-        tablaAsignacion = new JTable(modeloTablaAsignacion);
+        tablaAsignacion = new JTable(modeloTablaAsignacion) {
+            @Override
+            public boolean getScrollableTracksViewportWidth() {
+                return getParent() == null || getPreferredSize().width < getParent().getWidth();
+            }
+        };
         tablaAsignacion.setRowHeight(22);
         tablaAsignacion.setBackground(new Color(18, 21, 29));
         tablaAsignacion.setForeground(Color.WHITE);
@@ -236,6 +298,20 @@ public class VentanaSimulador extends JFrame {
             }
         });
         tablaAsignacion.getColumnModel().getColumn(0).setMaxWidth(50);
+        tablaAsignacion.getColumnModel().getColumn(0).setPreferredWidth(44);
+        tablaAsignacion.getColumnModel().getColumn(0).setMinWidth(40);
+        tablaAsignacion.getColumnModel().getColumn(1).setPreferredWidth(165);
+        tablaAsignacion.getColumnModel().getColumn(1).setMinWidth(110);
+        tablaAsignacion.getColumnModel().getColumn(2).setPreferredWidth(60);
+        tablaAsignacion.getColumnModel().getColumn(2).setMinWidth(50);
+        tablaAsignacion.getColumnModel().getColumn(3).setPreferredWidth(70);
+        tablaAsignacion.getColumnModel().getColumn(3).setMinWidth(58);
+        tablaAsignacion.getColumnModel().getColumn(4).setPreferredWidth(64);
+        tablaAsignacion.getColumnModel().getColumn(4).setMinWidth(50);
+        tablaAsignacion.getColumnModel().getColumn(5).setPreferredWidth(64);
+        tablaAsignacion.getColumnModel().getColumn(5).setMinWidth(50);
+        tablaAsignacion.getColumnModel().getColumn(6).setPreferredWidth(95);
+        tablaAsignacion.getColumnModel().getColumn(6).setMinWidth(70);
         tablaAsignacion.getColumnModel().getColumn(0).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
@@ -251,15 +327,17 @@ public class VentanaSimulador extends JFrame {
 
         JScrollPane spTabla = new JScrollPane(tablaAsignacion);
         spTabla.getViewport().setBackground(new Color(18, 21, 29));
-        spTabla.setPreferredSize(new Dimension(400, 210));
+        spTabla.setPreferredSize(new Dimension(400, 175));
         spTabla.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(0, 200, 115)),
-                " Tabla de Asignación de Archivos (Encadenada) ", 0, 0, null, Color.BLACK));
+                BorderFactory.createLineBorder(new Color(0, 170, 85)),
+                " Tabla de Asignación de Archivos (Encadenada) ", 0, 0,
+                new Font("Segoe UI", Font.BOLD, 11), COLOR_TITULO_PANEL));
         pnlCentro.add(spTabla, BorderLayout.SOUTH);
 
         // --- COLUMNA 3: COMPUTADOR ÚNICO (7 ESTADOS) Y GRÁFICO ---
         JPanel pnlDer = new JPanel(new BorderLayout(6, 6));
         pnlDer.setBackground(new Color(24, 28, 38));
+        pnlDer.setMinimumSize(new Dimension(240, 200));
         pnlDer.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createLineBorder(new Color(180, 90, 220)),
                 " Computador Único (Modelo de 7 Estados) ", 0, 0, null, Color.WHITE));
@@ -284,11 +362,11 @@ public class VentanaSimulador extends JFrame {
         modBloqSusp = new DefaultListModel<>();
         modTerminados = new DefaultListModel<>();
 
-        pnlColas.add(crearPanelCola("Cola LISTOS (RAM)", modListos, new Color(0, 200, 115)));
-        pnlColas.add(crearPanelCola("Cola BLOQUEADOS (E/S - RAM)", modBloqueados, new Color(255, 171, 0)));
-        pnlColas.add(crearPanelCola("Cola LISTO / SUSPENDIDO (Swap)", modListoSusp, new Color(0, 229, 255)));
-        pnlColas.add(crearPanelCola("Cola BLOQUEADO / SUSPENDIDO (Swap)", modBloqSusp, new Color(200, 120, 255)));
-        pnlColas.add(crearPanelCola("Procesos TERMINADOS", modTerminados, Color.LIGHT_GRAY));
+        pnlColas.add(crearPanelCola("Cola LISTOS (RAM)", modListos, new Color(0, 130, 65)));
+        pnlColas.add(crearPanelCola("Cola BLOQUEADOS (E/S - RAM)", modBloqueados, new Color(185, 95, 0)));
+        pnlColas.add(crearPanelCola("Cola LISTO / SUSPENDIDO (Swap)", modListoSusp, new Color(0, 125, 165)));
+        pnlColas.add(crearPanelCola("Cola BLOQUEADO / SUSPENDIDO (Swap)", modBloqSusp, new Color(120, 35, 185)));
+        pnlColas.add(crearPanelCola("Procesos TERMINADOS", modTerminados, new Color(180, 180, 180)));
 
         pnlDer.add(pnlColas, BorderLayout.CENTER);
 
@@ -307,12 +385,15 @@ public class VentanaSimulador extends JFrame {
         // =====================================================================
         txtLog = new JTextArea(5, 50);
         txtLog.setEditable(false);
+        txtLog.setLineWrap(true);
+        txtLog.setWrapStyleWord(true);
         txtLog.setBackground(new Color(14, 16, 22));
         txtLog.setForeground(new Color(180, 255, 180));
         txtLog.setFont(new Font("Consolas", Font.PLAIN, 11));
         JScrollPane spLog = new JScrollPane(txtLog);
         spLog.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(Color.DARK_GRAY), " Bitácora de Eventos del Sistema ", 0, 0, null, Color.LIGHT_GRAY));
+                BorderFactory.createLineBorder(new Color(100, 110, 130)), " Bitácora de Eventos del Sistema ", 0, 0,
+                new Font("Segoe UI", Font.BOLD, 11), COLOR_TITULO_PANEL));
         root.add(spLog, BorderLayout.SOUTH);
 
         setContentPane(root);
@@ -386,8 +467,11 @@ public class VentanaSimulador extends JFrame {
             }
         });
         JScrollPane sp = new JScrollPane(lista);
+        sp.setMinimumSize(new Dimension(150, 48));
         sp.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(bordeColor), " " + titulo + " ", 0, 0, null, bordeColor));
+                BorderFactory.createLineBorder(bordeColor), " " + titulo + " ", 0, 0,
+                new Font("Segoe UI", Font.BOLD, 11),
+                "Procesos TERMINADOS".equals(titulo) ? COLOR_TITULO_PANEL : bordeColor));
         return sp;
     }
 
@@ -426,6 +510,8 @@ public class VentanaSimulador extends JFrame {
                 " | Dirección: " + dir +
                 " | Desplazamiento Total: " + disco.getDesplazamientoTotal() +
                 " | Swap Libre: " + disco.contarBloquesLibresSwap() + "/" + disco.getTamanoSwapBloques());
+        lblInfoCabezal.revalidate();
+        panelMapaDisco.revalidate();
         panelMapaDisco.repaint();
         panelGraficoDisco.registrarPunto(disco.getDesplazamientoTotal());
 
@@ -638,9 +724,28 @@ public class VentanaSimulador extends JFrame {
     // PANEL INTERNO: MAPA VISUAL DE BLOQUES DEL DISCO
     // =========================================================================
     private class PanelMapaDisco extends JPanel {
+        private static final int COLS = 20;
+        private static final int PAD = 8;
+        private static final int MIN_CELL_W = 22;
+        private static final int MIN_CELL_H = 18;
+
         public PanelMapaDisco() {
             setBackground(new Color(16, 19, 27));
-            setPreferredSize(new Dimension(560, 240));
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            DiscoSimulado disco = sistema.getDisco();
+            int total = (disco != null) ? disco.getTotalBloques() : 200;
+            int rows = Math.max(1, (int) Math.ceil((double) total / COLS));
+            int minW = COLS * MIN_CELL_W + PAD * 2;
+            int minH = rows * MIN_CELL_H + PAD * 2;
+            Container parent = getParent();
+            if (parent instanceof JViewport) {
+                Dimension vp = parent.getSize();
+                return new Dimension(Math.max(minW, vp.width), Math.max(minH, vp.height));
+            }
+            return new Dimension(Math.max(560, minW), Math.max(220, minH));
         }
 
         @Override
@@ -650,21 +755,20 @@ public class VentanaSimulador extends JFrame {
             if (disco == null) return;
 
             int total = disco.getTotalBloques();
-            int cols = 20;
-            int rows = (int) Math.ceil((double) total / cols);
+            int rows = Math.max(1, (int) Math.ceil((double) total / COLS));
 
-            int pad = 8;
-            int cellW = Math.max(16, (getWidth() - pad * 2) / cols);
-            int cellH = Math.max(16, (getHeight() - pad * 2) / Math.max(1, rows));
+            int cellW = Math.max(MIN_CELL_W, (getWidth() - PAD * 2) / COLS);
+            int cellH = Math.max(MIN_CELL_H, (getHeight() - PAD * 2) / rows);
 
             g.setFont(new Font("Consolas", Font.PLAIN, 9));
+            FontMetrics fm = g.getFontMetrics();
 
             for (int i = 0; i < total; i++) {
                 Bloque b = disco.getBloque(i);
-                int r = i / cols;
-                int c = i % cols;
-                int x = pad + c * cellW;
-                int y = pad + r * cellH;
+                int r = i / COLS;
+                int c = i % COLS;
+                int x = PAD + c * cellW;
+                int y = PAD + r * cellH;
 
                 if (b.isOcupado()) {
                     g.setColor(b.getColor() != null ? b.getColor() : Color.CYAN);
@@ -683,8 +787,78 @@ public class VentanaSimulador extends JFrame {
                 }
 
                 g.setColor(b.isOcupado() ? Color.BLACK : Color.LIGHT_GRAY);
-                g.drawString(String.valueOf(i), x + 3, y + cellH - 4);
+                String txt = String.valueOf(i);
+                int tx = x + Math.max(2, (cellW - fm.stringWidth(txt)) / 2);
+                int ty = y + (cellH + fm.getAscent() - fm.getDescent()) / 2;
+                g.drawString(txt, tx, ty);
             }
+        }
+    }
+
+    private static class WrapLayout extends FlowLayout {
+        public WrapLayout(int align, int hgap, int vgap) {
+            super(align, hgap, vgap);
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container target) {
+            return layoutSize(target, true);
+        }
+
+        @Override
+        public Dimension minimumLayoutSize(Container target) {
+            Dimension minimum = layoutSize(target, false);
+            minimum.width -= (getHgap() + 1);
+            return minimum;
+        }
+
+        private Dimension layoutSize(Container target, boolean preferred) {
+            synchronized (target.getTreeLock()) {
+                int targetWidth = target.getWidth();
+                if (targetWidth <= 0 && target.getParent() != null) {
+                    targetWidth = target.getParent().getWidth();
+                }
+                int hgap = getHgap();
+                int vgap = getVgap();
+                Insets insets = target.getInsets();
+                int horizontalInsetsAndGap = insets.left + insets.right + (hgap * 2);
+                int maxWidth = (targetWidth > 0) ? (targetWidth - horizontalInsetsAndGap) : Integer.MAX_VALUE;
+
+                Dimension dim = new Dimension(0, 0);
+                int rowWidth = 0;
+                int rowHeight = 0;
+
+                int nmembers = target.getComponentCount();
+                for (int i = 0; i < nmembers; i++) {
+                    Component m = target.getComponent(i);
+                    if (m.isVisible()) {
+                        Dimension d = preferred ? m.getPreferredSize() : m.getMinimumSize();
+                        if (rowWidth + d.width > maxWidth && rowWidth > 0) {
+                            addRow(dim, rowWidth, rowHeight);
+                            rowWidth = 0;
+                            rowHeight = 0;
+                        }
+                        if (rowWidth != 0) {
+                            rowWidth += hgap;
+                        }
+                        rowWidth += d.width;
+                        rowHeight = Math.max(rowHeight, d.height);
+                    }
+                }
+                addRow(dim, rowWidth, rowHeight);
+
+                dim.width += horizontalInsetsAndGap;
+                dim.height += insets.top + insets.bottom + vgap * 2;
+                return dim;
+            }
+        }
+
+        private void addRow(Dimension dim, int rowWidth, int rowHeight) {
+            dim.width = Math.max(dim.width, rowWidth);
+            if (dim.height > 0) {
+                dim.height += getVgap();
+            }
+            dim.height += rowHeight;
         }
     }
 }
