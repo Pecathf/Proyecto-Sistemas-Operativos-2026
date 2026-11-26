@@ -13,7 +13,7 @@ import politicas.PoliticaFCFS;
 import politicas.PoliticaPlanificacion;
 import procesos.Proceso;
 import procesos.TipoProceso;
-import sincronizacion.Buffer;
+import sincronizacion.buffer;
 import utilidades.RegistroEventos;
 
 public class Cluster {
@@ -26,7 +26,7 @@ public class Cluster {
     private GeneradorID generadorID;
     private ListaEnlazada<Proceso> historialProcesos;
     private ListaEnlazada<Computador> computadores;
-    private ListaEnlazada<Buffer> buffers;
+    private ListaEnlazada<buffer> buffers;
     private int latenciaRedCiclos;
 
     public Cluster() {
@@ -185,7 +185,7 @@ public class Cluster {
         }
     }
 
-    public synchronized void agregarBuffer(Buffer b) {
+    public synchronized void agregarBuffer(buffer b) {
         buffers.agregar(b);
         Computador anfitrion = buscarComputadorPorNombre(b.getComputadorAnfitrion());
         if (anfitrion != null) {
@@ -194,9 +194,9 @@ public class Cluster {
         log("Buffer '" + b.getId() + "' creado en " + b.getComputadorAnfitrion());
     }
 
-    public synchronized Buffer buscarBuffer(String id) {
+    public synchronized buffer buscarBuffer(String id) {
         for (int i = 0; i < buffers.getTamano(); i++) {
-            Buffer b = buffers.obtener(i);
+            buffer b = buffers.obtener(i);
             if (b.getId().equalsIgnoreCase(id)) {
                 return b;
             }
@@ -246,7 +246,7 @@ public class Cluster {
         return computadores.clonar();
     }
 
-    public synchronized ListaEnlazada<Buffer> getBuffers() {
+    public synchronized ListaEnlazada<buffer> getBuffers() {
         return buffers.clonar();
     }
 
