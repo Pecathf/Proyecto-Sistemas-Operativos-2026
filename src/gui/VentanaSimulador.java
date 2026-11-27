@@ -235,7 +235,22 @@ public class VentanaSimulador extends JFrame {
         lblInfoCabezal.setWrapStyleWord(true);
         lblInfoCabezal.setForeground(new Color(255, 214, 0));
         lblInfoCabezal.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        pnlDiscoTop.add(lblInfoCabezal, BorderLayout.NORTH);
+
+        JPanel pnlLeyendaDisco = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 2));
+        pnlLeyendaDisco.setOpaque(false);
+        pnlLeyendaDisco.add(crearItemLeyenda(new Color(38, 44, 58), new Color(75, 85, 105), 1, "FS Libre", new Color(190, 195, 205)));
+        pnlLeyendaDisco.add(crearItemLeyenda(new Color(55, 38, 72), new Color(110, 75, 145), 1, "Swap Libre", new Color(215, 185, 235)));
+        pnlLeyendaDisco.add(crearItemLeyenda(Color.CYAN, new Color(0, 180, 180), 1, "Archivo Ocupado", Color.WHITE));
+        pnlLeyendaDisco.add(crearItemLeyenda(new Color(255, 140, 0), new Color(255, 170, 50), 1, "Swap Ocupado (Proc)", new Color(255, 200, 120)));
+        pnlLeyendaDisco.add(crearItemLeyenda(new Color(24, 28, 38), Color.YELLOW, 2, "Cabezal L/E", new Color(255, 220, 50)));
+
+        JPanel pnlCabeceraDisco = new JPanel();
+        pnlCabeceraDisco.setLayout(new BoxLayout(pnlCabeceraDisco, BoxLayout.Y_AXIS));
+        pnlCabeceraDisco.setOpaque(false);
+        pnlCabeceraDisco.setBorder(BorderFactory.createEmptyBorder(0, 2, 4, 2));
+        pnlCabeceraDisco.add(lblInfoCabezal);
+        pnlCabeceraDisco.add(pnlLeyendaDisco);
+        pnlDiscoTop.add(pnlCabeceraDisco, BorderLayout.NORTH);
 
         pnlDiscoTop.addComponentListener(new ComponentAdapter() {
             @Override
@@ -473,6 +488,44 @@ public class VentanaSimulador extends JFrame {
                 new Font("Segoe UI", Font.BOLD, 11),
                 "Procesos TERMINADOS".equals(titulo) ? COLOR_TITULO_PANEL : bordeColor));
         return sp;
+    }
+
+    private JPanel crearItemLeyenda(Color colorFondo, Color colorBorde, int grosorBorde, String texto, Color colorTexto) {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        p.setOpaque(false);
+
+        JLabel swatch = new JLabel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (colorFondo != null) {
+                    g2.setColor(colorFondo);
+                    g2.fillRect(1, 1, 10, 10);
+                }
+                if (colorBorde != null) {
+                    g2.setColor(colorBorde);
+                    g2.setStroke(new BasicStroke(grosorBorde));
+                    g2.drawRect(1, 1, 10, 10);
+                }
+                g2.dispose();
+            }
+
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(13, 13);
+            }
+        };
+        swatch.setOpaque(false);
+
+        JLabel lbl = new JLabel(texto);
+        lbl.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        lbl.setForeground(colorTexto != null ? colorTexto : Color.LIGHT_GRAY);
+
+        p.add(swatch);
+        p.add(lbl);
+        return p;
     }
 
     private void conectarReloj() {
