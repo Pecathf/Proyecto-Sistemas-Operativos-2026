@@ -1,0 +1,128 @@
+{
+  "diskConfig": {
+    "totalBlocks": 200,
+    "initialHead": 0
+  },
+  "fileSystem": [
+    {
+      "path": "/home",
+      "type": "DIRECTORY",
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/home/samuel",
+      "type": "DIRECTORY",
+      "owner": "samuel",
+      "permissions": "private"
+    },
+    {
+      "path": "/home/samuel/notas.txt",
+      "type": "FILE",
+      "startBlock": 0,
+      "blocks": 3,
+      "owner": "samuel",
+      "permissions": "private"
+    },
+    {
+      "path": "/home/samuel/tarea.pdf",
+      "type": "FILE",
+      "startBlock": 3,
+      "blocks": 8,
+      "owner": "samuel",
+      "permissions": "private"
+    },
+    {
+      "path": "/etc",
+      "type": "DIRECTORY",
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/etc/config.sys",
+      "type": "FILE",
+      "startBlock": 11,
+      "blocks": 2,
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/etc/passwd",
+      "type": "FILE",
+      "startBlock": 13,
+      "blocks": 1,
+      "owner": "admin",
+      "permissions": "private"
+    },
+    {
+      "path": "/var",
+      "type": "DIRECTORY",
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/var/log",
+      "type": "DIRECTORY",
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/var/log/sistema.log",
+      "type": "FILE",
+      "startBlock": 14,
+      "blocks": 5,
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/tmp",
+      "type": "DIRECTORY",
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/tmp/cache.dat",
+      "type": "FILE",
+      "startBlock": 19,
+      "blocks": 4,
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/home/jabri",
+      "type": "DIRECTORY",
+      "owner": "jabri",
+      "permissions": "private"
+    },
+    {
+      "path": "/home/jabri/proyecto.java",
+      "type": "FILE",
+      "startBlock": 23,
+      "blocks": 6,
+      "owner": "jabri",
+      "permissions": "private"
+    },
+    {
+      "path": "/home/jabri/datos.csv",
+      "type": "FILE",
+      "startBlock": 29,
+      "blocks": 10,
+      "owner": "jabri",
+      "permissions": "public"
+    },
+    {
+      "path": "/bin",
+      "type": "DIRECTORY",
+      "owner": "admin",
+      "permissions": "public"
+    },
+    {
+      "path": "/bin/shell.exe",
+      "type": "FILE",
+      "startBlock": 39,
+      "blocks": 7,
+      "owner": "admin",
+      "permissions": "public"
+    }
+  ]
+}

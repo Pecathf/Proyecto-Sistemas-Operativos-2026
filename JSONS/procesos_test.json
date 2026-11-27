@@ -1,0 +1,95 @@
+{
+  "cycleDurationMs": 300,
+  "swapSizeBlocks": 50,
+  "initialDiskPolicy": "FIFO",
+  "ramCapacity": 1024,
+  "policy": "FCFS",
+  "quantum": 3,
+  "processes": [
+    {
+      "name": "Compilador",
+      "instructions": 12,
+      "priority": 1,
+      "memory": 128,
+      "deadline": 200
+    },
+    {
+      "name": "Navegador",
+      "instructions": 20,
+      "priority": 3,
+      "memory": 256,
+      "deadline": 500
+    },
+    {
+      "name": "Editor_Texto",
+      "instructions": 6,
+      "priority": 2,
+      "memory": 64,
+      "deadline": 150
+    },
+    {
+      "name": "Lector_Notas",
+      "instructions": 4,
+      "priority": 2,
+      "memory": 32,
+      "deadline": 100,
+      "targetPath": "/home/samuel/notas.txt",
+      "operation": "READ",
+      "fileSizeBlocks": 3
+    },
+    {
+      "name": "Escritor_Log",
+      "instructions": 8,
+      "priority": 4,
+      "memory": 48,
+      "deadline": 300,
+      "targetPath": "/var/log/sistema.log",
+      "operation": "READ",
+      "fileSizeBlocks": 5
+    },
+    {
+      "name": "Creador_Temp",
+      "instructions": 5,
+      "priority": 3,
+      "memory": 32,
+      "deadline": 250,
+      "targetPath": "/tmp",
+      "operation": "CREATE",
+      "fileSizeBlocks": 2
+    },
+    {
+      "name": "Servidor_Web",
+      "instructions": 30,
+      "priority": 1,
+      "memory": 192,
+      "deadline": 800
+    },
+    {
+      "name": "Backup_Datos",
+      "instructions": 10,
+      "priority": 5,
+      "memory": 96,
+      "deadline": 400,
+      "targetPath": "/home/jabri/datos.csv",
+      "operation": "READ",
+      "fileSizeBlocks": 10
+    },
+    {
+      "name": "Antivirus",
+      "instructions": 15,
+      "priority": 2,
+      "memory": 128,
+      "deadline": 350
+    },
+    {
+      "name": "Indexador",
+      "instructions": 7,
+      "priority": 4,
+      "memory": 64,
+      "deadline": 200,
+      "targetPath": "/bin/shell.exe",
+      "operation": "READ",
+      "fileSizeBlocks": 7
+    }
+  ]
+}
