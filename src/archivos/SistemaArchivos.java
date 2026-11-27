@@ -18,6 +18,8 @@ import java.util.concurrent.Semaphore;
 
 public class SistemaArchivos {
 
+    public static final int MAX_USUARIOS = 5;
+
     private EntradaFS raiz;
     private DiscoSimulado disco;
     private ModoUsuario modoActual;
@@ -77,8 +79,14 @@ public class SistemaArchivos {
         if (padre == null || !padre.isEsDirectorio()) {
             return "Ruta de directorio destino inválida: " + rutaDirectorioPadre;
         }
-        if (!padre.getDueno().equalsIgnoreCase(usuarioActivo) && !rutaDirectorioPadre.startsWith("/usuarios")) {
-            return "Operación denegada: En modo Usuario solo puede crear archivos en sus propios directorios.";
+        boolean esPropio = padre.getDueno().equalsIgnoreCase(usuarioActivo);
+        boolean esZonaPermitida = rutaDirectorioPadre.startsWith("/usuarios")
+                || rutaDirectorioPadre.startsWith("/tmp")
+                || rutaDirectorioPadre.startsWith("/home/" + usuarioActivo);
+
+        if (!esPropio && !esZonaPermitida) {
+            return "Operación denegada: En modo Usuario solo puede crear archivos en sus propios directorios (dueño: " 
+                    + padre.getDueno() + ", usuario activo: " + usuarioActivo + ").";
         }
         return null;
     }
@@ -105,7 +113,11 @@ public class SistemaArchivos {
         if (modoActual == ModoUsuario.ADMINISTRADOR) {
             return null;
         }
-        return "Operación denegada: Solo el Administrador puede renombrar o modificar archivos y directorios.";
+        if (entrada.getDueno().equalsIgnoreCase(usuarioActivo)) {
+            return null; // El usuario puede renombrar o modificar sus propios archivos
+        }
+        return "Operación denegada: En modo Usuario solo puede modificar elementos de su propiedad (dueño: " 
+                + entrada.getDueno() + ", usuario activo: " + usuarioActivo + ").";
     }
 
     public String validarPermisoEliminar(String ruta) {
@@ -119,7 +131,11 @@ public class SistemaArchivos {
         if (modoActual == ModoUsuario.ADMINISTRADOR) {
             return null;
         }
-        return "Operación denegada: En modo Usuario no tiene permisos para eliminar elementos del sistema.";
+        if (entrada.getDueno().equalsIgnoreCase(usuarioActivo)) {
+            return null; // El usuario puede eliminar sus propios archivos
+        }
+        return "Operación denegada: En modo Usuario solo puede eliminar elementos de su propiedad (dueño: " 
+                + entrada.getDueno() + ", usuario activo: " + usuarioActivo + ").";
     }
 
     // =========================================================================
@@ -437,4 +453,107 @@ public class SistemaArchivos {
     }
     public String getUsuarioActivo() { return usuarioActivo; }
     public void setUsuarioActivo(String usuarioActivo) { this.usuarioActivo = usuarioActivo; }
+
+    public ListaEnlazada<String> obtenerUsuariosExistentes() {
+        ListaEnlazada<String> lista = new ListaEnlazada<>();
+        recolectarUsuarios(raiz, lista);
+        return lista;
+    }
+
+    private void recolectarUsuarios(EntradaFS nodo, ListaEnlazada<String> lista) {
+        if (nodo == null) return;
+        String dueno = nodo.getDueno();
+        if (dueno != null && !dueno.trim().isEmpty()
+                && !dueno.equalsIgnoreCase("admin")
+                && !dueno.equalsIgnoreCase("Sistema")) {
+            boolean existe = false;
+            for (int i = 0; i < lista.getTamano(); i++) {
+                if (lista.obtener(i).equalsIgnoreCase(dueno.trim())) {
+                    existe = true;
+                    break;
+                }
+            }
+            if (!existe) {
+                lista.agregar(dueno.trim());
+            }
+        }
+        if (nodo.isEsDirectorio() && nodo.getHijos() != null) {
+            for (int i = 0; i < nodo.getHijos().getTamano(); i++) {
+                recolectarUsuarios(nodo.getHijos().obtener(i), lista);
+            }
+        }
+    }
+
+    public boolean existeUsuario(String nombreUsuario) {
+        if (nombreUsuario == null || nombreUsuario.trim().isEmpty()) return false;
+        ListaEnlazada<String> usuarios = obtenerUsuariosExistentes();
+        for (int i = 0; i < usuarios.getTamano(); i++) {
+            if (usuarios.obtener(i).equalsIgnoreCase(nombreUsuario.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Registra un nuevo usuario en el sistema.
+     * Como máximo se permiten 5 usuarios.
+     * Si el usuario es nuevo, el Administrador crea automáticamente su carpeta personal.
+     * @return null si la operación fue exitosa, o un mensaje de error si no se pudo crear.
+     */
+    public String registrarNuevoUsuarioConCarpetaAdmin(String nombreUsuario) {
+        if (nombreUsuario == null || nombreUsuario.trim().isEmpty()) {
+            return "El nombre de usuario no puede estar vacío.";
+        }
+        String usuarioLimpio = nombreUsuario.trim();
+        if (usuarioLimpio.equalsIgnoreCase("admin") || usuarioLimpio.equalsIgnoreCase("Sistema")) {
+            return "No puede usar nombres reservados del sistema.";
+        }
+
+        ListaEnlazada<String> usuarios = obtenerUsuariosExistentes();
+        boolean yaExiste = false;
+        for (int i = 0; i < usuarios.getTamano(); i++) {
+            if (usuarios.obtener(i).equalsIgnoreCase(usuarioLimpio)) {
+                yaExiste = true;
+                break;
+            }
+        }
+
+        if (yaExiste) {
+            this.usuarioActivo = usuarioLimpio;
+            return null; // Ya existe, simplemente cambiamos la sesión a este usuario
+        }
+
+        if (usuarios.getTamano() >= MAX_USUARIOS) {
+            return "Límite alcanzado: El sistema solo permite un máximo de " + MAX_USUARIOS + " usuarios registrados.\n" +
+                   "Usuarios actuales: " + formatearListaUsuarios(usuarios);
+        }
+
+        // Determinar ruta de la carpeta personal (usar /home o /usuarios según lo que exista en el FS)
+        String rutaBase = "/home";
+        if (buscarPorRuta("/usuarios") != null) {
+            rutaBase = "/usuarios";
+        } else if (buscarPorRuta("/home") == null) {
+            crearDirectorio("/home", "admin", PermisoArchivo.PUBLICO);
+        }
+
+        String rutaCarpetaUsuario = rutaBase + "/" + usuarioLimpio;
+        boolean creada = crearDirectorio(rutaCarpetaUsuario, usuarioLimpio, PermisoArchivo.PRIVADO);
+        if (creada) {
+            this.usuarioActivo = usuarioLimpio;
+            log("ADMIN: Carpeta personal creada automáticamente en '" + rutaCarpetaUsuario + "' para el usuario '" + usuarioLimpio + "' (" + (usuarios.getTamano() + 1) + "/" + MAX_USUARIOS + ").");
+            return null;
+        } else {
+            return "Error al intentar crear la carpeta personal en: " + rutaCarpetaUsuario;
+        }
+    }
+
+    private String formatearListaUsuarios(ListaEnlazada<String> lista) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lista.getTamano(); i++) {
+            sb.append(lista.obtener(i));
+            if (i < lista.getTamano() - 1) sb.append(", ");
+        }
+        return sb.toString();
+    }
 }

@@ -87,6 +87,12 @@ public class GestorJSON {
             }
         }
 
+        // Si existen usuarios en el sistema de archivos cargado, seleccionar el primero por defecto
+        ListaEnlazada<String> usuariosDetectados = fs.obtenerUsuariosExistentes();
+        if (usuariosDetectados != null && usuariosDetectados.getTamano() > 0) {
+            fs.setUsuarioActivo(usuariosDetectados.obtener(0));
+        }
+
         return new ResultadoCargaFS(disco, fs);
     }
 

@@ -41,6 +41,7 @@ public class VentanaSimulador extends JFrame {
     private JButton btnIniciarPausar;
     private JButton btnPasoAPaso;
     private JComboBox<ModoUsuario> cmbModoUsuario;
+    private JButton btnUsuarioActivo;
     private JComboBox<TipoPolitica> cmbPoliticaCPU;
     private JComboBox<TipoPoliticaDisco> cmbPoliticaDisco;
     private JSlider sldVelocidad;
@@ -107,6 +108,16 @@ public class VentanaSimulador extends JFrame {
         btnPasoAPaso = new JButton("Paso +1");
 
         cmbModoUsuario = new JComboBox<>(ModoUsuario.values());
+
+        btnUsuarioActivo = new JButton("Usuario: " + sistema.getSistemaArchivos().getUsuarioActivo());
+        btnUsuarioActivo.setBackground(new Color(40, 50, 70));
+        btnUsuarioActivo.setForeground(new Color(0, 229, 255));
+        btnUsuarioActivo.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        btnUsuarioActivo.setFocusPainted(false);
+        btnUsuarioActivo.setToolTipText("Haga clic para cambiar de usuario o escribir uno nuevo");
+        btnUsuarioActivo.setVisible(sistema.getSistemaArchivos().getModoActual() == ModoUsuario.USUARIO);
+        btnUsuarioActivo.addActionListener(e -> solicitarCambioUsuario());
+
         cmbPoliticaCPU = new JComboBox<>(TipoPolitica.values());
         cmbPoliticaCPU.setSelectedItem(sistema.getComputadorUnico().getPlanificador().getPolitica().getTipo());
 
@@ -126,6 +137,7 @@ public class VentanaSimulador extends JFrame {
         barraTop.add(btnPasoAPaso);
         barraTop.add(new JLabel("Modo:") {{ setForeground(Color.WHITE); }});
         barraTop.add(cmbModoUsuario);
+        barraTop.add(btnUsuarioActivo);
         barraTop.add(new JLabel("CPU:") {{ setForeground(Color.WHITE); }});
         barraTop.add(cmbPoliticaCPU);
         barraTop.add(new JLabel("Disco:") {{ setForeground(Color.WHITE); }});
@@ -241,7 +253,7 @@ public class VentanaSimulador extends JFrame {
         pnlLeyendaDisco.add(crearItemLeyenda(new Color(38, 44, 58), new Color(75, 85, 105), 1, "FS Libre", new Color(190, 195, 205)));
         pnlLeyendaDisco.add(crearItemLeyenda(new Color(55, 38, 72), new Color(110, 75, 145), 1, "Swap Libre", new Color(215, 185, 235)));
         pnlLeyendaDisco.add(crearItemLeyenda(Color.CYAN, new Color(0, 180, 180), 1, "Archivo Ocupado", Color.WHITE));
-        pnlLeyendaDisco.add(crearItemLeyenda(new Color(255, 140, 0), new Color(255, 170, 50), 1, "Swap Ocupado (Proc)", new Color(255, 200, 120)));
+        pnlLeyendaDisco.add(crearItemLeyenda(new Color(180, 90, 220), new Color(215, 130, 255), 1, "Swap Ocupado (Proc)", new Color(225, 185, 255)));
         pnlLeyendaDisco.add(crearItemLeyenda(new Color(24, 28, 38), Color.YELLOW, 2, "Cabezal L/E", new Color(255, 220, 50)));
 
         JPanel pnlCabeceraDisco = new JPanel();
@@ -439,7 +451,16 @@ public class VentanaSimulador extends JFrame {
         cmbModoUsuario.addActionListener(e -> {
             ModoUsuario m = (ModoUsuario) cmbModoUsuario.getSelectedItem();
             sistema.getSistemaArchivos().setModoActual(m);
-            refrescarBitacora();
+            if (m == ModoUsuario.USUARIO) {
+                btnUsuarioActivo.setVisible(true);
+                solicitarCambioUsuario();
+            } else {
+                btnUsuarioActivo.setVisible(false);
+                sistema.getSistemaArchivos().setUsuarioActivo("admin");
+            }
+            barraTop.revalidate();
+            barraTop.repaint();
+            refrescarTodaLaInterfaz();
         });
 
         cmbPoliticaCPU.addActionListener(e -> {
@@ -534,6 +555,14 @@ public class VentanaSimulador extends JFrame {
 
     public void refrescarTodaLaInterfaz() {
         lblCiclo.setText("Ciclo: " + sistema.getReloj().getCicloActual());
+
+        if (btnUsuarioActivo != null) {
+            boolean esUsuario = sistema.getSistemaArchivos().getModoActual() == ModoUsuario.USUARIO;
+            btnUsuarioActivo.setVisible(esUsuario);
+            if (esUsuario) {
+                btnUsuarioActivo.setText("Usuario: " + sistema.getSistemaArchivos().getUsuarioActivo());
+            }
+        }
 
         // CPU y RAM
         Computador comp = sistema.getComputadorUnico();
@@ -652,6 +681,57 @@ public class VentanaSimulador extends JFrame {
                 "Tamaño: " + sel.getTamanoBloques() + " bloques | Bloque Inicial: " + sel.getPrimerBloque() + "\n" +
                 "Proceso Creador: " + sel.getProcesoCreador()
         );
+    }
+
+    private void solicitarCambioUsuario() {
+        SistemaArchivos fs = sistema.getSistemaArchivos();
+        ListaEnlazada<String> usuarios = fs.obtenerUsuariosExistentes();
+
+        JComboBox<String> cmb = new JComboBox<>();
+        cmb.setEditable(true);
+        if (usuarios != null) {
+            for (int i = 0; i < usuarios.getTamano(); i++) {
+                cmb.addItem(usuarios.obtener(i));
+            }
+        }
+        if (cmb.getItemCount() == 0) {
+            cmb.addItem("samuel");
+            cmb.addItem("user1");
+        }
+        cmb.setSelectedItem(fs.getUsuarioActivo());
+
+        JPanel panel = new JPanel(new GridLayout(3, 1, 6, 6));
+        panel.add(new JLabel("Seleccione o escriba un nombre de usuario:"));
+        panel.add(cmb);
+        int totalUsuarios = (usuarios != null) ? usuarios.getTamano() : 0;
+        JLabel lblInfo = new JLabel("Usuarios registrados: " + totalUsuarios + " / " + SistemaArchivos.MAX_USUARIOS);
+        lblInfo.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        lblInfo.setForeground(new Color(170, 180, 200));
+        panel.add(lblInfo);
+
+        int res = JOptionPane.showConfirmDialog(this, panel, "Sesión de Usuario",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (res == JOptionPane.OK_OPTION) {
+            Object sel = cmb.getSelectedItem();
+            if (sel != null && !sel.toString().trim().isEmpty()) {
+                String usuarioIngresado = sel.toString().trim();
+                boolean esNuevo = !fs.existeUsuario(usuarioIngresado);
+
+                String error = fs.registrarNuevoUsuarioConCarpetaAdmin(usuarioIngresado);
+                if (error != null) {
+                    JOptionPane.showMessageDialog(this, error, "Operación no permitida", JOptionPane.WARNING_MESSAGE);
+                } else {
+                    btnUsuarioActivo.setText("Usuario: " + fs.getUsuarioActivo());
+                    if (esNuevo) {
+                        JOptionPane.showMessageDialog(this,
+                                "¡Usuario '" + usuarioIngresado + "' registrado con éxito!\n" +
+                                "El Administrador ha creado automáticamente su carpeta personal.",
+                                "Nuevo Usuario Creado", JOptionPane.INFORMATION_MESSAGE);
+                    }
+                    refrescarTodaLaInterfaz();
+                }
+            }
+        }
     }
 
     // =========================================================================
